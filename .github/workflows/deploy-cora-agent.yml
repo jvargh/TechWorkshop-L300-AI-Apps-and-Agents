@@ -1,0 +1,58 @@
+name: Deploy Cora Shopping Agent
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/app/agents/shopperAgent_initializer.py'
+      - 'src/prompts/ShopperAgentPrompt.txt'
+  workflow_dispatch:
+
+jobs:
+  deploy-cora-agent:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Install Python dependencies
+      run: |
+        cd src
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Create environment file for agent deployment
+      run: |
+        cd src
+        cat > .env << 'EOF'
+        # Azure AI Agent Service credentials
+        AZURE_AI_AGENT_ENDPOINT="${{ secrets.AZURE_AI_AGENT_ENDPOINT }}"
+        AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME="${{ secrets.AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME }}"
+        AZURE_AI_AGENT_API_VERSION="${{ secrets.AZURE_AI_AGENT_API_VERSION }}"
+        EOF
+        
+    - name: Deploy Cora Shopping Agent
+      run: |
+        cd src
+        echo "🚀 Deploying Cora Shopping Agent..."
+        python app/agents/shopperAgent_initializer.py
+        
+    - name: Verify deployment
+      run: |
+        echo "✅ Cora Shopping Agent deployment completed successfully!"
+        echo "📋 Files that triggered this deployment:"
+        echo "   - shopperAgent_initializer.py"
+        echo "   - ShopperAgentPrompt.txt"  
+        echo "📊 Commit: ${{ github.sha }}"
+        echo "🔗 Run: ${{ github.run_id }}"

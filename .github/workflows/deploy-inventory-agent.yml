@@ -1,0 +1,66 @@
+name: Deploy Inventory Agent
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/app/agents/inventoryAgent_initializer.py'
+      - 'src/prompts/InventoryAgentPrompt.txt'
+      - 'src/app/tools/inventoryCheck.py'
+  workflow_dispatch:
+
+jobs:
+  deploy-inventory-agent:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Install Python dependencies
+      run: |
+        cd src
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Create environment file for agent deployment
+      run: |
+        cd src
+        cat > .env << 'EOF'
+        # Azure AI Agent Service credentials
+        AZURE_AI_AGENT_ENDPOINT="${{ secrets.AZURE_AI_AGENT_ENDPOINT }}"
+        AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME="${{ secrets.AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME }}"
+        AZURE_AI_AGENT_API_VERSION="${{ secrets.AZURE_AI_AGENT_API_VERSION }}"
+        
+        # Cosmos DB for inventory check tool
+        COSMOS_ENDPOINT="${{ secrets.COSMOS_ENDPOINT }}"
+        COSMOS_KEY="${{ secrets.COSMOS_KEY }}"
+        DATABASE_NAME="${{ secrets.DATABASE_NAME }}"
+        CONTAINER_NAME="${{ secrets.CONTAINER_NAME }}"
+        EOF
+        
+    - name: Deploy Inventory Agent
+      run: |
+        cd src
+        echo "🚀 Deploying Inventory Agent..."
+        python app/agents/inventoryAgent_initializer.py
+        
+    - name: Verify deployment
+      run: |
+        echo "✅ Inventory Agent deployment completed successfully!"
+        echo "📋 Files that triggered this deployment:"
+        echo "   - inventoryAgent_initializer.py"
+        echo "   - InventoryAgentPrompt.txt"  
+        echo "   - inventoryCheck.py (tool)"
+        echo "📊 Commit: ${{ github.sha }}"
+        echo "🔗 Run: ${{ github.run_id }}"

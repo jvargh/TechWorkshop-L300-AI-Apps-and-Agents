@@ -1,0 +1,142 @@
+name: Deploy Container to Azure
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+  workflow_dispatch:
+
+env:
+  AZURE_CONTAINER_REGISTRY: 'acrowrgnenm7wj2y'
+  CONTAINER_NAME: 'zava-a2a-app'
+  RESOURCE_GROUP: 'techworkshop-l300-ai-agents-centralus'
+  APP_NAME: 'zava-a2a-app'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Login to Azure Container Registry
+      run: |
+        az acr login --name ${{ env.AZURE_CONTAINER_REGISTRY }}
+        
+    - name: Create environment file
+      run: |
+        cd src
+        cat > .env << 'EOF'
+        OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT="true"
+        
+        # Azure AI Foundry credentials
+        AZURE_OPENAI_ENDPOINT="${{ secrets.AZURE_OPENAI_ENDPOINT }}"
+        AZURE_OPENAI_KEY="${{ secrets.AZURE_OPENAI_KEY }}"
+        AZURE_OPENAI_API_VERSION="${{ secrets.AZURE_OPENAI_API_VERSION }}"
+        
+        AZURE_AI_AGENT_ENDPOINT="${{ secrets.AZURE_AI_AGENT_ENDPOINT }}"
+        AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME="${{ secrets.AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME }}"
+        AZURE_AI_AGENT_API_VERSION="${{ secrets.AZURE_AI_AGENT_API_VERSION }}"
+        
+        # Agent IDs
+        interior_designer="${{ secrets.INTERIOR_DESIGNER_AGENT_ID }}"
+        customer_loyalty="${{ secrets.CUSTOMER_LOYALTY_AGENT_ID }}"
+        inventory_agent="${{ secrets.INVENTORY_AGENT_ID }}"
+        cora="${{ secrets.CORA_AGENT_ID }}"
+        
+        # GPT-4.1 credentials
+        gpt_endpoint="${{ secrets.GPT_ENDPOINT }}"
+        gpt_deployment="${{ secrets.GPT_DEPLOYMENT }}"
+        gpt_api_key="${{ secrets.GPT_API_KEY }}"
+        gpt_api_version="${{ secrets.GPT_API_VERSION }}"
+        
+        # Phi-4 credentials
+        phi_4_endpoint="${{ secrets.PHI_4_ENDPOINT }}"
+        phi_4_deployment="${{ secrets.PHI_4_DEPLOYMENT }}"
+        phi_4_api_key="${{ secrets.PHI_4_API_KEY }}"
+        phi_4_api_version="${{ secrets.PHI_4_API_VERSION }}"
+        
+        # Storage account credentials
+        blob_connection_string="${{ secrets.BLOB_CONNECTION_STRING }}"
+        storage_account_name="${{ secrets.STORAGE_ACCOUNT_NAME }}"
+        storage_container_name="${{ secrets.STORAGE_CONTAINER_NAME }}"
+        
+        # AI Search credentials
+        SEARCH_ENDPOINT="${{ secrets.SEARCH_ENDPOINT }}"
+        SEARCH_KEY="${{ secrets.SEARCH_KEY }}"
+        INDEX_NAME="${{ secrets.INDEX_NAME }}"
+        
+        # Cosmos DB credentials
+        COSMOS_ENDPOINT="${{ secrets.COSMOS_ENDPOINT }}"
+        COSMOS_KEY="${{ secrets.COSMOS_KEY }}"
+        DATABASE_NAME="${{ secrets.DATABASE_NAME }}"
+        CONTAINER_NAME="${{ secrets.CONTAINER_NAME }}"
+        
+        # Application Insights credentials
+        APPLICATIONINSIGHTS_CONNECTION_STRING="${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}"
+        EOF
+        
+    - name: Build and push Docker image
+      run: |
+        cd src
+        IMAGE_TAG="${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:${{ github.sha }}"
+        LATEST_TAG="${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest"
+        
+        # Build image with commit SHA tag
+        docker build -t $IMAGE_TAG .
+        docker build -t $LATEST_TAG .
+        
+        # Push both tags
+        docker push $IMAGE_TAG
+        docker push $LATEST_TAG
+        
+        echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+        echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
+        
+    - name: Update App Service with new image
+      run: |
+        az webapp config container set \
+          --name ${{ env.APP_NAME }} \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --container-image-name ${{ env.LATEST_TAG }} \
+          --container-registry-url https://${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io
+          
+    - name: Restart App Service
+      run: |
+        az webapp restart \
+          --name ${{ env.APP_NAME }} \
+          --resource-group ${{ env.RESOURCE_GROUP }}
+          
+    - name: Verify deployment
+      run: |
+        echo "Waiting for app to restart..."
+        sleep 30
+        
+        # Test health endpoint
+        HEALTH_URL="https://${{ env.APP_NAME }}.azurewebsites.net/health"
+        echo "Testing health endpoint: $HEALTH_URL"
+        
+        for i in {1..5}; do
+          if curl -f $HEALTH_URL; then
+            echo "✅ Deployment successful! App is responding."
+            break
+          else
+            echo "⏳ Attempt $i failed, retrying in 10 seconds..."
+            sleep 10
+          fi
+        done
+        
+    - name: Output deployment summary
+      run: |
+        echo "🚀 Deployment Summary:"
+        echo "📦 Image: ${{ env.LATEST_TAG }}"
+        echo "🌐 App URL: https://${{ env.APP_NAME }}.azurewebsites.net"
+        echo "💚 Health Check: https://${{ env.APP_NAME }}.azurewebsites.net/health"
+        echo "📊 Commit: ${{ github.sha }}"
