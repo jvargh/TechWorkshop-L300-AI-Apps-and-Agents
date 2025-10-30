@@ -5,7 +5,7 @@ from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
 from azure.ai.agents.models import FunctionTool, ToolSet
 
-# Interior Design Agent - Updated with CI/CD automation
+# Interior Design Agent - Updated with CI/CD automation and permissions
 from typing import Callable, Set, Any
 from tools.imageCreationTool import create_image
 
