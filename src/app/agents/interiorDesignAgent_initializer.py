@@ -53,7 +53,7 @@ with project_client:
         # Update existing agent
         print(f"Found existing agent: {existing_agent.id}")
         agent = project_client.agents.update_agent(
-            assistant_id=existing_agent.id,
+            agent_id=existing_agent.id,
             model=os.environ["AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME"],
             name=agent_name,
             instructions=ID_PROMPT,
