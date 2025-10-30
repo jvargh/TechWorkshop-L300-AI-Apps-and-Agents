@@ -5,7 +5,7 @@ from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
 from azure.ai.agents.models import FunctionTool, ToolSet
 
-# Interior Design Agent - Testing with OpenAI Contributor permissions
+# Interior Design Agent - Testing with permissions to correct AI Studio project
 from typing import Callable, Set, Any
 from tools.imageCreationTool import create_image
 
