@@ -47,6 +47,9 @@ jobs:
         COSMOS_KEY="${{ secrets.COSMOS_KEY }}"
         DATABASE_NAME="${{ secrets.DATABASE_NAME }}"
         CONTAINER_NAME="${{ secrets.CONTAINER_NAME }}"
+        
+        # Application Insights for telemetry
+        APPLICATIONINSIGHTS_CONNECTION_STRING="${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}"
         EOF
         
     - name: Deploy Customer Loyalty Agent
