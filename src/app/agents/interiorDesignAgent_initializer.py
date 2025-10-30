@@ -4,6 +4,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
 from azure.ai.agents.models import FunctionTool, ToolSet
+
+# Interior Design Agent - Updated with CI/CD automation
 from typing import Callable, Set, Any
 from tools.imageCreationTool import create_image
 
