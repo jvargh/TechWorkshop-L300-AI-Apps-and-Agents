@@ -63,6 +63,59 @@ jobs:
         echo "service-principal-id=${{ secrets.AZURE_CLIENT_ID }}" >> $GITHUB_OUTPUT  
         echo "should-destroy=${{ github.event.inputs.destroy_first }}" >> $GITHUB_OUTPUT
         
+    - name: Validate service principal permissions
+      id: validate-permissions
+      run: |
+        echo "🔐 Validating service principal permissions..."
+        
+        # Get current service principal object ID
+        SP_OBJECT_ID=$(az ad sp show --id ${{ secrets.AZURE_CLIENT_ID }} --query id -o tsv)
+        SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+        
+        echo "Service Principal Object ID: $SP_OBJECT_ID"
+        echo "Subscription ID: $SUBSCRIPTION_ID"
+        
+        # Check if service principal has Contributor role at subscription level
+        CONTRIBUTOR_ROLE=$(az role assignment list \
+          --assignee $SP_OBJECT_ID \
+          --role "Contributor" \
+          --scope "/subscriptions/$SUBSCRIPTION_ID" \
+          --query "[0].roleDefinitionName" -o tsv)
+          
+        # Check if service principal has User Access Administrator role
+        UAA_ROLE=$(az role assignment list \
+          --assignee $SP_OBJECT_ID \
+          --role "User Access Administrator" \
+          --scope "/subscriptions/$SUBSCRIPTION_ID" \
+          --query "[0].roleDefinitionName" -o tsv)
+        
+        # Validate required roles exist
+        if [ "$CONTRIBUTOR_ROLE" != "Contributor" ]; then
+          echo "⚠️ Missing Contributor role. Attempting to assign..."
+          az role assignment create \
+            --assignee $SP_OBJECT_ID \
+            --role "Contributor" \
+            --scope "/subscriptions/$SUBSCRIPTION_ID" \
+            --output none
+          echo "✅ Contributor role assigned"
+        else
+          echo "✅ Contributor role confirmed"
+        fi
+        
+        if [ "$UAA_ROLE" != "User Access Administrator" ]; then
+          echo "⚠️ Missing User Access Administrator role. Attempting to assign..."
+          az role assignment create \
+            --assignee $SP_OBJECT_ID \
+            --role "User Access Administrator" \
+            --scope "/subscriptions/$SUBSCRIPTION_ID" \
+            --output none
+          echo "✅ User Access Administrator role assigned"
+        else
+          echo "✅ User Access Administrator role confirmed"
+        fi
+        
+        echo "✅ All required permissions validated"
+        
         echo "🚀 Infrastructure Deployment Configuration"
         echo "=== CENTRALIZED CONFIGURATION ==="
         echo "Config File: ${{ env.CONFIG_FILE }}"
