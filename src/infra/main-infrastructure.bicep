@@ -222,7 +222,7 @@ resource aiSearchService 'Microsoft.Search/searchServices@2023-11-01' = {
   location: location
   tags: commonTags
   sku: {
-    name: 'standard'
+    name: 'basic'
   }
   properties: {
     replicaCount: 1
