@@ -30,10 +30,10 @@ on:
           - prod
 
 env:
-  AZURE_CONTAINER_REGISTRY: 'pdmoobijwgr5c'
+  AZURE_CONTAINER_REGISTRY: 'acrpdmoobijwgr5cdev'
   CONTAINER_NAME: 'zava-a2a-app'
   RESOURCE_GROUP: 'techworkshop-l300-ai-agents-v2-dev'
-  APP_NAME: 'pdmoobijwgr5c'
+  APP_NAME: 'zava-a2a-dev-pdmoobijwgr5c'
 
 jobs:
   build-and-deploy:
