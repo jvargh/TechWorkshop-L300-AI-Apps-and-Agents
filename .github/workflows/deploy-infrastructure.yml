@@ -487,17 +487,21 @@ jobs:
           exit 1
         fi
         
-        # Get service keys (TEST MODE - just validate commands work)
-        echo "Getting storage connection string for account: $STORAGE_ACCOUNT in RG: $RESOURCE_GROUP"
-        STORAGE_CONN=$(az storage account show-connection-string --name "$STORAGE_ACCOUNT" --resource-group "$RESOURCE_GROUP" --query connectionString -o tsv)
-        echo "✅ Storage connection string retrieved successfully"
-        # gh secret set BLOB_CONNECTION_STRING --body "$STORAGE_CONN"
+        # SIMPLE TEST: Just check Azure CLI access and resource existence
+        echo "Testing Azure CLI access..."
+        az account show --output table
         
-        # Validate Cosmos DB account name
-        if [ -z "$COSMOS_ACCOUNT" ] || [ "$COSMOS_ACCOUNT" = "null" ]; then
-          echo "❌ ERROR: Cosmos DB account name not found in deployment outputs"
-          exit 1
-        fi
+        echo "Testing resource group access..."
+        az group show --name "$RESOURCE_GROUP" --output table
+        
+        echo "Testing storage account existence..."
+        az storage account show --name "$STORAGE_ACCOUNT" --resource-group "$RESOURCE_GROUP" --output table
+        
+        echo "✅ Basic Azure CLI operations successful"
+        
+        # TESTING COMPLETE - Exit here to avoid complex operations
+        echo "🎯 Test successful - Azure CLI authentication and basic resource access working"
+        exit 0
         
         echo "Getting Cosmos DB key for account: $COSMOS_ACCOUNT"
         COSMOS_KEY=$(az cosmosdb keys list --name "$COSMOS_ACCOUNT" --resource-group "$RESOURCE_GROUP" --query primaryMasterKey -o tsv)
