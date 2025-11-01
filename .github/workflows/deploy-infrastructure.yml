@@ -495,10 +495,8 @@ jobs:
         echo "Getting Cosmos DB key for account: $COSMOS_ACCOUNT"
         COSMOS_KEY=$(az cosmosdb keys list --name "$COSMOS_ACCOUNT" --resource-group "$RESOURCE_GROUP" --query primaryMasterKey -o tsv)
         echo "✅ Cosmos DB key retrieved successfully"
-        gh secret set COSMOS_KEY --body "$COSMOS_KEY" --repo ${{ github.repository }}
         COSMOS_ENDPOINT=$(az cosmosdb show --name "$COSMOS_ACCOUNT" --resource-group "$RESOURCE_GROUP" --query documentEndpoint -o tsv)
         echo "✅ Cosmos DB endpoint retrieved: $COSMOS_ENDPOINT"
-        gh secret set COSMOS_ENDPOINT --body "$COSMOS_ENDPOINT" --repo ${{ github.repository }}
         
         # Validate AI Search service name
         if [ -z "$SEARCH_SERVICE" ] || [ "$SEARCH_SERVICE" = "null" ]; then
@@ -509,38 +507,44 @@ jobs:
         echo "Getting AI Search key for service: $SEARCH_SERVICE"
         SEARCH_KEY=$(az search admin-key show --service-name "$SEARCH_SERVICE" --resource-group "$RESOURCE_GROUP" --query primaryKey -o tsv)
         echo "✅ AI Search key retrieved successfully"
-        gh secret set SEARCH_KEY --body "$SEARCH_KEY" --repo ${{ github.repository }}
         SEARCH_ENDPOINT="https://${SEARCH_SERVICE}.search.windows.net"
         echo "✅ AI Search endpoint: $SEARCH_ENDPOINT"
-        gh secret set SEARCH_ENDPOINT --body "$SEARCH_ENDPOINT" --repo ${{ github.repository }}
         
         echo "Getting OpenAI key..."
         OPENAI_KEY=$(az cognitiveservices account keys list --name $AI_SERVICES --resource-group $RESOURCE_GROUP --query key1 -o tsv)
         echo "✅ OpenAI key retrieved successfully"
-        gh secret set AZURE_OPENAI_KEY --body "$OPENAI_KEY" --repo ${{ github.repository }}
         OPENAI_ENDPOINT=$(az cognitiveservices account show --name $AI_SERVICES --resource-group $RESOURCE_GROUP --query properties.endpoint -o tsv)
         echo "✅ OpenAI endpoint: $OPENAI_ENDPOINT"
-        gh secret set AZURE_OPENAI_ENDPOINT --body "$OPENAI_ENDPOINT" --repo ${{ github.repository }}
         
         echo "Getting AI Studio keys..."
         AI_STUDIO_KEY=$(az cognitiveservices account keys list --name $AI_STUDIO_HUB --resource-group $AI_RESOURCE_GROUP --query key1 -o tsv)
         echo "✅ AI Studio key retrieved successfully"
-        gh secret set GPT_API_KEY --body "$AI_STUDIO_KEY" --repo ${{ github.repository }}
         AI_STUDIO_ENDPOINT=$(az cognitiveservices account show --name $AI_STUDIO_HUB --resource-group $AI_RESOURCE_GROUP --query properties.endpoint -o tsv)
         echo "✅ AI Studio endpoint: $AI_STUDIO_ENDPOINT"
-        gh secret set GPT_ENDPOINT --body "$AI_STUDIO_ENDPOINT" --repo ${{ github.repository }}
         
         echo "Getting Application Insights connection..."
         APP_INSIGHTS_CONN=$(az monitor app-insights component show --app $APP_INSIGHTS --resource-group $RESOURCE_GROUP --query connectionString -o tsv)
         echo "✅ App Insights connection retrieved successfully"
-        gh secret set APPLICATIONINSIGHTS_CONNECTION_STRING --body "$APP_INSIGHTS_CONN" --repo ${{ github.repository }}
         
-        # Set database/container names
-        
-        gh secret set DATABASE_NAME --body "zava" --repo ${{ github.repository }}
-        gh secret set CONTAINER_NAME --body "product_catalog" --repo ${{ github.repository }}
-        
-        echo "✅ All service keys retrieved and GitHub secrets updated successfully"
+        echo "📋 SERVICE KEYS RETRIEVED - MANUAL SECRET SETUP REQUIRED"
+        echo "=================================================="
+        echo "The following secrets need to be set manually in GitHub:"
+        echo "Repository Settings → Secrets and variables → Actions → New repository secret"
+        echo ""
+        echo "COSMOS_KEY=$COSMOS_KEY"
+        echo "COSMOS_ENDPOINT=$COSMOS_ENDPOINT"
+        echo "SEARCH_KEY=$SEARCH_KEY" 
+        echo "SEARCH_ENDPOINT=$SEARCH_ENDPOINT"
+        echo "AZURE_OPENAI_KEY=$OPENAI_KEY"
+        echo "AZURE_OPENAI_ENDPOINT=$OPENAI_ENDPOINT"
+        echo "GPT_API_KEY=$AI_STUDIO_KEY"
+        echo "GPT_ENDPOINT=$AI_STUDIO_ENDPOINT"
+        echo "APPLICATIONINSIGHTS_CONNECTION_STRING=$APP_INSIGHTS_CONN"
+        echo "DATABASE_NAME=zava"
+        echo "CONTAINER_NAME=product_catalog"
+        echo ""
+        echo "⚠️  Note: GitHub Actions default token cannot set repository secrets."
+        echo "✅ All service keys retrieved successfully - please set secrets manually."
 
   #============================================================================
   # DATA DEPLOYMENT PHASE
