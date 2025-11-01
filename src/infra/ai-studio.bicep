@@ -15,7 +15,6 @@ param deploymentTimestamp string = utcNow('yyyy-MM-dd')
 
 // Generate unique suffix for resource names
 var uniqueSuffix = uniqueString(resourceGroup().id, environmentSuffix)
-var projectPrefix = 'zava'
 
 // ====================================
 // CENTRALIZED AI STUDIO NAMING
@@ -57,9 +56,6 @@ resource aiStudioHub 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
     customSubDomainName: aiStudioHubName
     disableLocalAuth: false
     publicNetworkAccess: 'Enabled'
-    apiProperties: {
-      statisticsEnabled: false
-    }
   }
 }
 
