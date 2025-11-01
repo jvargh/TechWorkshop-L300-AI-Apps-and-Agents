@@ -329,7 +329,10 @@ jobs:
           --query properties.outputs \
           --output json)
           
-        echo "ai-studio-outputs=$AI_STUDIO_OUTPUT" >> $GITHUB_OUTPUT
+        # Properly encode JSON for GitHub Actions output
+        echo "ai-studio-outputs<<EOF" >> $GITHUB_OUTPUT
+        echo "$AI_STUDIO_OUTPUT" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
         echo "✅ AI Studio infrastructure deployed successfully"
         
         # Display key outputs
