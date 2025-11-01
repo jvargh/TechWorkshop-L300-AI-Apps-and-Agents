@@ -246,6 +246,7 @@ jobs:
   deploy-main-infrastructure:
     runs-on: ubuntu-latest
     needs: [prepare-deployment, deploy-resource-groups]
+    if: needs.prepare-deployment.result == 'success' && needs.deploy-resource-groups.result == 'success'
     outputs:
       deployment-outputs: ${{ steps.deploy.outputs.deployment-outputs }}
     
@@ -291,6 +292,7 @@ jobs:
   deploy-ai-studio:
     runs-on: ubuntu-latest
     needs: [prepare-deployment, deploy-resource-groups, deploy-main-infrastructure]
+    if: needs.prepare-deployment.result == 'success' && needs.deploy-resource-groups.result == 'success' && needs.deploy-main-infrastructure.result == 'success'
     outputs:
       ai-studio-outputs: ${{ steps.deploy-ai.outputs.ai-studio-outputs }}
     
