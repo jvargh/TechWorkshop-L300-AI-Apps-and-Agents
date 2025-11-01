@@ -76,7 +76,7 @@ def add_products_to_cart(question, product_list):
     completion = client.chat.completions.create(
         model=DEPLOYMENT,
         messages=chat_prompt,
-        max_tokens=5686,
+        max_completion_tokens=5686,
         temperature=0,
         top_p=1,
         frequency_penalty=0,

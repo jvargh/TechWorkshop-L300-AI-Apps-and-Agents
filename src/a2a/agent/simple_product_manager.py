@@ -71,7 +71,7 @@ Be friendly, helpful, and knowledgeable about home improvement and furniture pro
             
             # Generate response with proper settings
             settings = OpenAIChatPromptExecutionSettings(
-                max_tokens=1000,
+                max_completion_tokens=1000,
                 temperature=0.7
             )
             

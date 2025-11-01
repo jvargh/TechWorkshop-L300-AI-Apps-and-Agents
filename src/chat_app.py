@@ -220,7 +220,7 @@ def call_handoff(handoff_client: ChatCompletionsClient, handoff_prompt: str, for
                     SystemMessage(content=handoff_prompt),
                     UserMessage(content=formatted_history),
                 ],
-                max_tokens=2048,
+                max_completion_tokens=2048,
                 temperature=0.8,
                 top_p=0.1,
                 presence_penalty=0.0,
