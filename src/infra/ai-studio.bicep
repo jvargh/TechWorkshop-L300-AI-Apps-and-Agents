@@ -41,7 +41,7 @@ var commonTags = {
 //==============================================================================
 
 @description('Creates Azure AI Studio Hub (Cognitive Services Account)')
-resource aiStudioHub 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
+resource aiStudioHub 'Microsoft.CognitiveServices/accounts@2025-09-01' = {
   name: aiStudioHubName
   location: location
   tags: commonTags
@@ -59,8 +59,12 @@ resource aiStudioHub 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
   }
 }
 
+// NOTE: AI Studio Project creation is handled separately
+// Projects can be created via Azure AI Studio portal or REST API after hub deployment
+// Commented out due to API version compatibility issues with Bicep deployment
+/*
 @description('Creates Azure AI Studio Project')
-resource aiStudioProject 'Microsoft.CognitiveServices/accounts/projects@2023-05-01' = {
+resource aiStudioProject 'Microsoft.CognitiveServices/accounts/projects@2025-09-01' = {
   parent: aiStudioHub
   name: aiStudioProjectName
   location: location
@@ -69,6 +73,7 @@ resource aiStudioProject 'Microsoft.CognitiveServices/accounts/projects@2023-05-
     // Project-specific properties
   }
 }
+*/
 
 //==============================================================================
 // RBAC & PERMISSIONS FOR AI STUDIO
@@ -114,20 +119,20 @@ resource aiDeveloperRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
 @description('AI Studio Hub name')
 output aiStudioHubName string = aiStudioHub.name
 
-@description('AI Studio Project name') 
-output aiStudioProjectName string = aiStudioProject.name
+@description('AI Studio Project name - will be created separately') 
+output aiStudioProjectName string = aiStudioProjectName
 
 @description('AI Studio Hub endpoint')
 output aiStudioHubEndpoint string = aiStudioHub.properties.endpoint
 
-@description('AI Studio Project endpoint (for agent deployment)')
-output aiStudioProjectEndpoint string = '${aiStudioHub.properties.endpoint}api/projects/${aiStudioProject.name}'
+@description('AI Studio Project endpoint - placeholder for manual project creation')
+output aiStudioProjectEndpoint string = '${aiStudioHub.properties.endpoint}api/projects/${aiStudioProjectName}'
 
 @description('AI Studio Hub resource ID')
 output aiStudioHubResourceId string = aiStudioHub.id
 
-@description('AI Studio Project resource ID')
-output aiStudioProjectResourceId string = aiStudioProject.id
+@description('AI Studio Project resource ID - placeholder for manual project creation')
+output aiStudioProjectResourceId string = 'Manual_Creation_Required'
 
 @description('Location where AI Studio is deployed')
 output aiStudioLocation string = location
