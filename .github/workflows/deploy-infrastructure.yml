@@ -1,0 +1,520 @@
+name: Deploy Complete Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy (dev/staging/prod)'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      destroy_first:
+        description: 'Delete existing resources first'
+        required: false
+        default: false
+        type: boolean
+      deploy_sample_data:
+        description: 'Deploy sample data and search index'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  ENVIRONMENT: ${{ github.event.inputs.environment }}
+  # Configuration is now centralized in infrastructure-variables.yml
+  # These values are loaded from the config file but can be overridden here if needed
+  PRIMARY_LOCATION: 'centralus'
+  AI_STUDIO_LOCATION: 'eastus2'
+  PRIMARY_RG_NAME: 'techworkshop-l300-ai-agents-${{ github.event.inputs.environment }}'
+  AI_STUDIO_RG_NAME: 'azureai-${{ github.event.inputs.environment }}-rg'
+  CONFIG_FILE: 'src/infra/config/infrastructure-variables.yml'
+  PARAMETERS_FILE: 'src/infra/parameters/${{ github.event.inputs.environment }}.parameters.json'
+
+jobs:
+  #============================================================================
+  # PREPARATION PHASE
+  #============================================================================
+  prepare-deployment:
+    runs-on: ubuntu-latest
+    outputs:
+      primary-rg: ${{ steps.setup.outputs.primary-rg }}
+      ai-studio-rg: ${{ steps.setup.outputs.ai-studio-rg }}
+      service-principal-id: ${{ steps.setup.outputs.service-principal-id }}
+      should-destroy: ${{ steps.setup.outputs.should-destroy }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Setup deployment variables
+      id: setup
+      run: |
+        echo "primary-rg=${{ env.PRIMARY_RG_NAME }}" >> $GITHUB_OUTPUT
+        echo "ai-studio-rg=${{ env.AI_STUDIO_RG_NAME }}" >> $GITHUB_OUTPUT
+        echo "service-principal-id=${{ secrets.AZURE_CLIENT_ID }}" >> $GITHUB_OUTPUT  
+        echo "should-destroy=${{ github.event.inputs.destroy_first }}" >> $GITHUB_OUTPUT
+        
+        echo "🚀 Infrastructure Deployment Configuration"
+        echo "=== CENTRALIZED CONFIGURATION ==="
+        echo "Config File: ${{ env.CONFIG_FILE }}"
+        echo "Parameters File: ${{ env.PARAMETERS_FILE }}"
+        echo ""
+        echo "=== ENVIRONMENT SETTINGS ==="
+        echo "Environment: ${{ env.ENVIRONMENT }}"
+        echo "Primary RG: ${{ env.PRIMARY_RG_NAME }}"
+        echo "AI Studio RG: ${{ env.AI_STUDIO_RG_NAME }}"
+        echo "Primary Location: ${{ env.PRIMARY_LOCATION }}"
+        echo "AI Studio Location: ${{ env.AI_STUDIO_LOCATION }}"
+        echo ""
+        echo "=== DEPLOYMENT OPTIONS ==="
+        echo "Destroy First: ${{ github.event.inputs.destroy_first }}"
+        echo "Deploy Sample Data: ${{ github.event.inputs.deploy_sample_data }}"
+        echo ""
+        echo "=== CONFIGURATION FILES STATUS ==="
+        if [ -f "${{ env.CONFIG_FILE }}" ]; then
+          echo "✅ Configuration file exists: ${{ env.CONFIG_FILE }}"
+        else
+          echo "❌ Configuration file missing: ${{ env.CONFIG_FILE }}"
+        fi
+        if [ -f "${{ env.PARAMETERS_FILE }}" ]; then
+          echo "✅ Parameters file exists: ${{ env.PARAMETERS_FILE }}"
+        else
+          echo "❌ Parameters file missing: ${{ env.PARAMETERS_FILE }}"
+        fi
+
+  #============================================================================
+  # DESTRUCTION PHASE (if requested)
+  #============================================================================
+  destroy-infrastructure:
+    runs-on: ubuntu-latest
+    needs: prepare-deployment
+    if: needs.prepare-deployment.outputs.should-destroy == 'true'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Delete AI Studio Resource Group
+      run: |
+        echo "🗑️ Deleting AI Studio Resource Group: ${{ needs.prepare-deployment.outputs.ai-studio-rg }}"
+        if az group exists --name ${{ needs.prepare-deployment.outputs.ai-studio-rg }}; then
+          az group delete --name ${{ needs.prepare-deployment.outputs.ai-studio-rg }} --yes --no-wait
+          echo "✅ AI Studio RG deletion initiated"
+        else
+          echo "ℹ️ AI Studio RG does not exist"
+        fi
+        
+    - name: Delete Primary Resource Group  
+      run: |
+        echo "🗑️ Deleting Primary Resource Group: ${{ needs.prepare-deployment.outputs.primary-rg }}"
+        if az group exists --name ${{ needs.prepare-deployment.outputs.primary-rg }}; then
+          az group delete --name ${{ needs.prepare-deployment.outputs.primary-rg }} --yes --no-wait
+          echo "✅ Primary RG deletion initiated"
+        else
+          echo "ℹ️ Primary RG does not exist"
+        fi
+        
+    - name: Wait for deletion completion
+      run: |
+        echo "⏳ Waiting for resource groups to be fully deleted..."
+        
+        # Wait for AI Studio RG deletion
+        while az group exists --name ${{ needs.prepare-deployment.outputs.ai-studio-rg }}; do
+          echo "⏳ Waiting for AI Studio RG deletion..."
+          sleep 30
+        done
+        
+        # Wait for Primary RG deletion  
+        while az group exists --name ${{ needs.prepare-deployment.outputs.primary-rg }}; do
+          echo "⏳ Waiting for Primary RG deletion..."
+          sleep 30
+        done
+        
+        echo "✅ All resource groups deleted successfully"
+
+  #============================================================================
+  # INFRASTRUCTURE DEPLOYMENT PHASE
+  #============================================================================
+  deploy-resource-groups:
+    runs-on: ubuntu-latest
+    needs: [prepare-deployment, destroy-infrastructure]
+    if: always() && !failure()
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Create Primary Resource Group
+      run: |
+        echo "🏗️ Creating Primary Resource Group: ${{ needs.prepare-deployment.outputs.primary-rg }}"
+        az group create \
+          --name ${{ needs.prepare-deployment.outputs.primary-rg }} \
+          --location ${{ env.PRIMARY_LOCATION }} \
+          --tags \
+            Environment=${{ env.ENVIRONMENT }} \
+            Project="TechWorkshop-L300-AI-Agents" \
+            ManagedBy="GitHubActions" \
+            Repository="${{ github.repository }}"
+        echo "✅ Primary resource group created"
+        
+    - name: Create AI Studio Resource Group
+      run: |
+        echo "🏗️ Creating AI Studio Resource Group: ${{ needs.prepare-deployment.outputs.ai-studio-rg }}"
+        az group create \
+          --name ${{ needs.prepare-deployment.outputs.ai-studio-rg }} \
+          --location ${{ env.AI_STUDIO_LOCATION }} \
+          --tags \
+            Environment=${{ env.ENVIRONMENT }} \
+            Project="TechWorkshop-L300-AI-Agents" \
+            ManagedBy="GitHubActions" \
+            Repository="${{ github.repository }}" \
+            Component="AIStudio"
+        echo "✅ AI Studio resource group created"
+
+  deploy-main-infrastructure:
+    runs-on: ubuntu-latest
+    needs: [prepare-deployment, deploy-resource-groups]
+    outputs:
+      deployment-outputs: ${{ steps.deploy.outputs.deployment-outputs }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Get Service Principal Object ID
+      id: get-sp-id
+      run: |
+        SP_OBJECT_ID=$(az ad sp show --id ${{ secrets.AZURE_CLIENT_ID }} --query id -o tsv)
+        echo "service-principal-object-id=$SP_OBJECT_ID" >> $GITHUB_OUTPUT
+        echo "Service Principal Object ID: $SP_OBJECT_ID"
+        
+    - name: Deploy Main Infrastructure
+      id: deploy
+      run: |
+        echo "🚀 Deploying main infrastructure..."
+        
+        # Deploy using centralized parameter file with runtime overrides
+        DEPLOYMENT_OUTPUT=$(az deployment group create \
+          --resource-group ${{ needs.prepare-deployment.outputs.primary-rg }} \
+          --template-file src/infra/main-infrastructure.bicep \
+          --parameters @${{ env.PARAMETERS_FILE }} \
+          --parameters \
+            servicePrincipalObjectId=${{ steps.get-sp-id.outputs.service-principal-object-id }} \
+            repositoryName="${{ github.repository }}" \
+          --query properties.outputs \
+          --output json)
+          
+        echo "deployment-outputs=$DEPLOYMENT_OUTPUT" >> $GITHUB_OUTPUT
+        echo "✅ Main infrastructure deployed successfully"
+        
+        # Display key outputs
+        echo "📋 Deployment Outputs:"
+        echo "$DEPLOYMENT_OUTPUT" | jq .
+
+  deploy-ai-studio:
+    runs-on: ubuntu-latest
+    needs: [prepare-deployment, deploy-resource-groups, deploy-main-infrastructure]
+    outputs:
+      ai-studio-outputs: ${{ steps.deploy-ai.outputs.ai-studio-outputs }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Get Service Principal Object ID
+      id: get-sp-id
+      run: |
+        SP_OBJECT_ID=$(az ad sp show --id ${{ secrets.AZURE_CLIENT_ID }} --query id -o tsv)
+        echo "service-principal-object-id=$SP_OBJECT_ID" >> $GITHUB_OUTPUT
+        
+    - name: Deploy AI Studio Infrastructure
+      id: deploy-ai
+      run: |
+        echo "🚀 Deploying AI Studio infrastructure..."
+        
+        # Deploy AI Studio using centralized parameter file  
+        AI_STUDIO_OUTPUT=$(az deployment group create \
+          --resource-group ${{ needs.prepare-deployment.outputs.ai-studio-rg }} \
+          --template-file src/infra/ai-studio.bicep \
+          --parameters \
+            location=${{ env.AI_STUDIO_LOCATION }} \
+            environmentSuffix=${{ env.ENVIRONMENT }} \
+            servicePrincipalObjectId=${{ steps.get-sp-id.outputs.service-principal-object-id }} \
+            repositoryName="${{ github.repository }}" \
+          --query properties.outputs \
+          --output json)
+          
+        echo "ai-studio-outputs=$AI_STUDIO_OUTPUT" >> $GITHUB_OUTPUT
+        echo "✅ AI Studio infrastructure deployed successfully"
+        
+        # Display key outputs
+        echo "📋 AI Studio Outputs:"
+        echo "$AI_STUDIO_OUTPUT" | jq .
+
+  #============================================================================
+  # CONFIGURATION PHASE
+  #============================================================================
+  update-github-secrets:
+    runs-on: ubuntu-latest
+    needs: [prepare-deployment, deploy-main-infrastructure, deploy-ai-studio]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Extract deployment outputs
+      id: extract
+      run: |
+        # Parse main infrastructure outputs
+        MAIN_OUTPUTS='${{ needs.deploy-main-infrastructure.outputs.deployment-outputs }}'
+        AI_OUTPUTS='${{ needs.deploy-ai-studio.outputs.ai-studio-outputs }}'
+        
+        # Extract key values (avoiding secrets in outputs)
+        RESOURCE_GROUP=$(echo "$MAIN_OUTPUTS" | jq -r '.resourceGroupName.value')
+        CONTAINER_REGISTRY=$(echo "$MAIN_OUTPUTS" | jq -r '.containerRegistryName.value')
+        WEB_APP_NAME=$(echo "$MAIN_OUTPUTS" | jq -r '.webAppName.value')
+        A2A_WEB_APP_NAME=$(echo "$MAIN_OUTPUTS" | jq -r '.a2aWebAppName.value')
+        STORAGE_ACCOUNT=$(echo "$MAIN_OUTPUTS" | jq -r '.storageAccountName.value')
+        
+        AI_STUDIO_ENDPOINT=$(echo "$AI_OUTPUTS" | jq -r '.aiStudioProjectEndpoint.value')
+        
+        echo "resource-group=$RESOURCE_GROUP" >> $GITHUB_OUTPUT
+        echo "container-registry=$CONTAINER_REGISTRY" >> $GITHUB_OUTPUT
+        echo "web-app-name=$WEB_APP_NAME" >> $GITHUB_OUTPUT
+        echo "a2a-web-app-name=$A2A_WEB_APP_NAME" >> $GITHUB_OUTPUT
+        echo "storage-account=$STORAGE_ACCOUNT" >> $GITHUB_OUTPUT
+        echo "ai-studio-endpoint=$AI_STUDIO_ENDPOINT" >> $GITHUB_OUTPUT
+        
+    - name: Update GitHub Secrets
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "🔐 Updating GitHub Secrets with deployment outputs..."
+        
+        # Core resource information
+        gh secret set AZURE_RESOURCE_GROUP --body "${{ steps.extract.outputs.resource-group }}"
+        gh secret set AZURE_CONTAINER_REGISTRY --body "${{ steps.extract.outputs.container-registry }}"
+        gh secret set AZURE_APP_SERVICE_NAME --body "${{ steps.extract.outputs.web-app-name }}"
+        gh secret set AZURE_A2A_APP_SERVICE_NAME --body "${{ steps.extract.outputs.a2a-web-app-name }}"
+        gh secret set STORAGE_ACCOUNT_NAME --body "${{ steps.extract.outputs.storage-account }}"
+        
+        # AI Studio configuration
+        gh secret set AZURE_AI_AGENT_ENDPOINT --body "${{ steps.extract.outputs.ai-studio-endpoint }}"
+        gh secret set AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME --body "gpt-4o-mini"
+        gh secret set AZURE_AI_AGENT_API_VERSION --body "2024-12-01-preview"
+        
+        echo "✅ GitHub secrets updated successfully"
+
+  get-service-keys:
+    runs-on: ubuntu-latest  
+    needs: [prepare-deployment, deploy-main-infrastructure, deploy-ai-studio, update-github-secrets]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Get service keys and update secrets
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "🔑 Retrieving service keys..."
+        
+        # Parse deployment outputs
+        MAIN_OUTPUTS='${{ needs.deploy-main-infrastructure.outputs.deployment-outputs }}'
+        AI_OUTPUTS='${{ needs.deploy-ai-studio.outputs.ai-studio-outputs }}'
+        
+        # Get resource names
+        RESOURCE_GROUP=$(echo "$MAIN_OUTPUTS" | jq -r '.resourceGroupName.value')
+        AI_RESOURCE_GROUP=${{ needs.prepare-deployment.outputs.ai-studio-rg }}
+        
+        STORAGE_ACCOUNT=$(echo "$MAIN_OUTPUTS" | jq -r '.storageAccountName.value')
+        COSMOS_ACCOUNT=$(echo "$MAIN_OUTPUTS" | jq -r '.resourceNaming.value.cosmosDb')
+        SEARCH_SERVICE=$(echo "$MAIN_OUTPUTS" | jq -r '.resourceNaming.value.aiSearch')
+        AI_SERVICES=$(echo "$MAIN_OUTPUTS" | jq -r '.resourceNaming.value.aiServices')
+        APP_INSIGHTS=$(echo "$MAIN_OUTPUTS" | jq -r '.resourceNaming.value.appInsights')
+        
+        AI_STUDIO_HUB=$(echo "$AI_OUTPUTS" | jq -r '.aiStudioHubName.value')
+        
+        # Get service keys
+        echo "Getting storage connection string..."
+        STORAGE_CONN=$(az storage account show-connection-string --name $STORAGE_ACCOUNT --resource-group $RESOURCE_GROUP --query connectionString -o tsv)
+        gh secret set BLOB_CONNECTION_STRING --body "$STORAGE_CONN"
+        
+        echo "Getting Cosmos DB key..."
+        COSMOS_KEY=$(az cosmosdb keys list --name $COSMOS_ACCOUNT --resource-group $RESOURCE_GROUP --query primaryMasterKey -o tsv)
+        gh secret set COSMOS_KEY --body "$COSMOS_KEY"
+        COSMOS_ENDPOINT=$(az cosmosdb show --name $COSMOS_ACCOUNT --resource-group $RESOURCE_GROUP --query documentEndpoint -o tsv)
+        gh secret set COSMOS_ENDPOINT --body "$COSMOS_ENDPOINT"
+        
+        echo "Getting AI Search key..."
+        SEARCH_KEY=$(az search admin-key show --service-name $SEARCH_SERVICE --resource-group $RESOURCE_GROUP --query primaryKey -o tsv)
+        gh secret set SEARCH_KEY --body "$SEARCH_KEY"
+        SEARCH_ENDPOINT="https://${SEARCH_SERVICE}.search.windows.net"
+        gh secret set SEARCH_ENDPOINT --body "$SEARCH_ENDPOINT"
+        
+        echo "Getting OpenAI key..."
+        OPENAI_KEY=$(az cognitiveservices account keys list --name $AI_SERVICES --resource-group $RESOURCE_GROUP --query key1 -o tsv)
+        gh secret set AZURE_OPENAI_KEY --body "$OPENAI_KEY"
+        OPENAI_ENDPOINT=$(az cognitiveservices account show --name $AI_SERVICES --resource-group $RESOURCE_GROUP --query properties.endpoint -o tsv)
+        gh secret set AZURE_OPENAI_ENDPOINT --body "$OPENAI_ENDPOINT"
+        
+        echo "Getting AI Studio keys..."
+        AI_STUDIO_KEY=$(az cognitiveservices account keys list --name $AI_STUDIO_HUB --resource-group $AI_RESOURCE_GROUP --query key1 -o tsv)
+        gh secret set GPT_API_KEY --body "$AI_STUDIO_KEY"
+        AI_STUDIO_ENDPOINT=$(az cognitiveservices account show --name $AI_STUDIO_HUB --resource-group $AI_RESOURCE_GROUP --query properties.endpoint -o tsv)
+        gh secret set GPT_ENDPOINT --body "$AI_STUDIO_ENDPOINT"
+        
+        echo "Getting Application Insights connection..."
+        APP_INSIGHTS_CONN=$(az monitor app-insights component show --app $APP_INSIGHTS --resource-group $RESOURCE_GROUP --query connectionString -o tsv)
+        gh secret set APPLICATIONINSIGHTS_CONNECTION_STRING --body "$APP_INSIGHTS_CONN"
+        
+        # Set database/container names
+        gh secret set DATABASE_NAME --body "zava"
+        gh secret set CONTAINER_NAME --body "product_catalog"
+        
+        echo "✅ All service keys retrieved and stored as secrets"
+
+  #============================================================================
+  # DATA DEPLOYMENT PHASE
+  #============================================================================
+  deploy-sample-data:
+    runs-on: ubuntu-latest
+    needs: [prepare-deployment, deploy-main-infrastructure, deploy-ai-studio, get-service-keys]
+    if: github.event.inputs.deploy_sample_data == 'true'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Install Python dependencies
+      run: |
+        cd src
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Create environment file
+      run: |
+        cd src
+        cat > .env << 'EOF'
+        # Get values from GitHub secrets
+        COSMOS_ENDPOINT="${{ secrets.COSMOS_ENDPOINT }}"
+        COSMOS_KEY="${{ secrets.COSMOS_KEY }}"
+        DATABASE_NAME="${{ secrets.DATABASE_NAME }}"
+        CONTAINER_NAME="${{ secrets.CONTAINER_NAME }}"
+        
+        SEARCH_ENDPOINT="${{ secrets.SEARCH_ENDPOINT }}"
+        SEARCH_KEY="${{ secrets.SEARCH_KEY }}"
+        INDEX_NAME="zava-product-catalog"
+        
+        AZURE_OPENAI_ENDPOINT="${{ secrets.AZURE_OPENAI_ENDPOINT }}"
+        AZURE_OPENAI_KEY="${{ secrets.AZURE_OPENAI_KEY }}"
+        AZURE_OPENAI_API_VERSION="2024-12-01-preview"
+        EOF
+        
+    - name: Deploy data to Cosmos DB
+      run: |
+        cd src
+        echo "📦 Ingesting product data to Cosmos DB..."
+        python pipelines/ingest_to_cosmos.py
+        echo "✅ Product data ingested successfully"
+        
+    - name: Create AI Search index
+      run: |
+        cd src
+        echo "🔍 Creating AI Search index..."
+        python pipelines/create_search_index.py
+        echo "✅ AI Search index created successfully"
+
+  #============================================================================
+  # VALIDATION PHASE
+  #============================================================================
+  validate-deployment:
+    runs-on: ubuntu-latest
+    needs: [prepare-deployment, deploy-main-infrastructure, deploy-ai-studio, get-service-keys]
+    if: always() && !failure()
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Validate infrastructure deployment
+      run: |
+        echo "✅ Infrastructure Deployment Validation"
+        echo "======================================="
+        
+        # Parse outputs
+        MAIN_OUTPUTS='${{ needs.deploy-main-infrastructure.outputs.deployment-outputs }}'
+        AI_OUTPUTS='${{ needs.deploy-ai-studio.outputs.ai-studio-outputs }}'
+        
+        echo "🏗️ Main Infrastructure:"
+        echo "Resource Group: $(echo "$MAIN_OUTPUTS" | jq -r '.resourceGroupName.value')"
+        echo "Web App URL: $(echo "$MAIN_OUTPUTS" | jq -r '.webAppUrl.value')"
+        echo "A2A Web App URL: $(echo "$MAIN_OUTPUTS" | jq -r '.a2aWebAppUrl.value')"
+        echo "Container Registry: $(echo "$MAIN_OUTPUTS" | jq -r '.containerRegistryName.value')"
+        
+        echo ""
+        echo "🤖 AI Studio:"
+        echo "Hub Name: $(echo "$AI_OUTPUTS" | jq -r '.aiStudioHubName.value')"
+        echo "Project Endpoint: $(echo "$AI_OUTPUTS" | jq -r '.aiStudioProjectEndpoint.value')"
+        
+        echo ""
+        echo "🎯 Next Steps:"
+        echo "1. Deploy AI agents using existing workflows"
+        echo "2. Build and deploy container applications"
+        echo "3. Test end-to-end functionality"
+        
+        echo "✅ Infrastructure deployment completed successfully!"

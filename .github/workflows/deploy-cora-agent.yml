@@ -1,18 +1,50 @@
 name: Deploy Cora Shopping Agent
 
 on:
+  # Trigger after infrastructure deployment completes successfully
+  workflow_run:
+    workflows: ["Deploy Complete Infrastructure"]
+    types: [completed]
+    branches: [main]
+  
+  # Manual trigger and code changes (but infrastructure must exist)
   push:
     branches: [ main ]
     paths:
       - 'src/app/agents/shopperAgent_initializer.py'
       - 'src/prompts/ShopperAgentPrompt.txt'
   workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deployment without infrastructure dependency check'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   deploy-cora-agent:
     runs-on: ubuntu-latest
+    # Only run if infrastructure deployment succeeded OR manual force deployment
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name != 'workflow_run' || github.event.inputs.force_deploy == 'true' }}
     
     steps:
+    - name: Check Infrastructure Dependency
+      run: |
+        echo "🔍 Checking deployment trigger..."
+        if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+          echo "✅ Triggered by infrastructure deployment completion"
+          echo "Infrastructure workflow conclusion: ${{ github.event.workflow_run.conclusion }}"
+          if [[ "${{ github.event.workflow_run.conclusion }}" != "success" ]]; then
+            echo "❌ Infrastructure deployment failed - cannot deploy agent"
+            exit 1
+          fi
+        elif [[ "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
+          echo "⚠️  Force deployment enabled - skipping infrastructure check"
+        else
+          echo "📝 Manual trigger or code change - assuming infrastructure exists"
+          echo "💡 If deployment fails, run infrastructure deployment first"
+        fi
+    
     - name: Checkout repository
       uses: actions/checkout@v4
       
