@@ -1,0 +1,197 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.38.33.27573",
+      "templateHash": "16772426427610235614"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "eastus2",
+      "metadata": {
+        "description": "Location for AI Studio resources (must support AI Studio)"
+      }
+    },
+    "environmentSuffix": {
+      "type": "string",
+      "defaultValue": "dev",
+      "metadata": {
+        "description": "Environment suffix for resource naming"
+      }
+    },
+    "servicePrincipalObjectId": {
+      "type": "string",
+      "metadata": {
+        "description": "Service principal object ID for role assignments"
+      }
+    },
+    "repositoryName": {
+      "type": "string",
+      "defaultValue": "TechWorkshop-L300-AI-Apps-and-agents",
+      "metadata": {
+        "description": "GitHub repository name for tagging"
+      }
+    },
+    "deploymentTimestamp": {
+      "type": "string",
+      "defaultValue": "[utcNow('yyyy-MM-dd')]",
+      "metadata": {
+        "description": "Deployment timestamp for tagging"
+      }
+    }
+  },
+  "variables": {
+    "uniqueSuffix": "[uniqueString(resourceGroup().id, parameters('environmentSuffix'))]",
+    "projectPrefix": "zava",
+    "aiStudioHubName": "[format('admin-{0}-{1}', variables('uniqueSuffix'), parameters('location'))]",
+    "aiStudioProjectName": "[format('{0}_project', variables('aiStudioHubName'))]",
+    "commonTags": {
+      "Environment": "[parameters('environmentSuffix')]",
+      "Project": "TechWorkshop-L300-AI-Agents",
+      "Repository": "[parameters('repositoryName')]",
+      "ManagedBy": "GitHubActions",
+      "CostCenter": "Engineering",
+      "Owner": "TechWorkshop-Team",
+      "CreatedDate": "[parameters('deploymentTimestamp')]",
+      "Component": "AIStudio"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2023-05-01",
+      "name": "[variables('aiStudioHubName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "sku": {
+        "name": "S0"
+      },
+      "kind": "AIServices",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "customSubDomainName": "[variables('aiStudioHubName')]",
+        "disableLocalAuth": false,
+        "publicNetworkAccess": "Enabled",
+        "apiProperties": {
+          "statisticsEnabled": false
+        }
+      },
+      "metadata": {
+        "description": "Creates Azure AI Studio Hub (Cognitive Services Account)"
+      }
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/projects",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', variables('aiStudioHubName'), variables('aiStudioProjectName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('aiStudioHubName'))]"
+      ],
+      "metadata": {
+        "description": "Creates Azure AI Studio Project"
+      }
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', variables('aiStudioHubName'))]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', variables('aiStudioHubName')), parameters('servicePrincipalObjectId'), 'a001fd3d-188f-4b5d-821b-7da978bf7442')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a001fd3d-188f-4b5d-821b-7da978bf7442')]",
+        "principalId": "[parameters('servicePrincipalObjectId')]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('aiStudioHubName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', variables('aiStudioHubName'))]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', variables('aiStudioHubName')), parameters('servicePrincipalObjectId'), '25fbc0a9-bd7c-42a3-aa1a-3b75d497ee68')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '25fbc0a9-bd7c-42a3-aa1a-3b75d497ee68')]",
+        "principalId": "[parameters('servicePrincipalObjectId')]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('aiStudioHubName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', variables('aiStudioHubName'))]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', variables('aiStudioHubName')), parameters('servicePrincipalObjectId'), '64702f94-c441-49e6-a78b-ef80e0188fee')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '64702f94-c441-49e6-a78b-ef80e0188fee')]",
+        "principalId": "[parameters('servicePrincipalObjectId')]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('aiStudioHubName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "aiStudioHubName": {
+      "type": "string",
+      "metadata": {
+        "description": "AI Studio Hub name"
+      },
+      "value": "[variables('aiStudioHubName')]"
+    },
+    "aiStudioProjectName": {
+      "type": "string",
+      "metadata": {
+        "description": "AI Studio Project name"
+      },
+      "value": "[variables('aiStudioProjectName')]"
+    },
+    "aiStudioHubEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "AI Studio Hub endpoint"
+      },
+      "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', variables('aiStudioHubName')), '2023-05-01').endpoint]"
+    },
+    "aiStudioProjectEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "AI Studio Project endpoint (for agent deployment)"
+      },
+      "value": "[format('{0}api/projects/{1}', reference(resourceId('Microsoft.CognitiveServices/accounts', variables('aiStudioHubName')), '2023-05-01').endpoint, variables('aiStudioProjectName'))]"
+    },
+    "aiStudioHubResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "AI Studio Hub resource ID"
+      },
+      "value": "[resourceId('Microsoft.CognitiveServices/accounts', variables('aiStudioHubName'))]"
+    },
+    "aiStudioProjectResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "AI Studio Project resource ID"
+      },
+      "value": "[resourceId('Microsoft.CognitiveServices/accounts/projects', variables('aiStudioHubName'), variables('aiStudioProjectName'))]"
+    },
+    "aiStudioLocation": {
+      "type": "string",
+      "metadata": {
+        "description": "Location where AI Studio is deployed"
+      },
+      "value": "[parameters('location')]"
+    }
+  }
+}

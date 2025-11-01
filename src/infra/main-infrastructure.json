@@ -1,0 +1,683 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.38.33.27573",
+      "templateHash": "2989034787970197217"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "centralus",
+      "minLength": 1,
+      "metadata": {
+        "description": "Primary location for all resources."
+      }
+    },
+    "aiStudioLocation": {
+      "type": "string",
+      "defaultValue": "eastus2",
+      "metadata": {
+        "description": "AI Studio location (must support AI Studio)"
+      }
+    },
+    "environmentSuffix": {
+      "type": "string",
+      "defaultValue": "dev",
+      "metadata": {
+        "description": "Environment suffix for resource naming"
+      }
+    },
+    "servicePrincipalObjectId": {
+      "type": "string",
+      "metadata": {
+        "description": "Service principal object ID for role assignments"
+      }
+    },
+    "repositoryName": {
+      "type": "string",
+      "defaultValue": "TechWorkshop-L300-AI-Apps-and-agents",
+      "metadata": {
+        "description": "GitHub repository name for tagging"
+      }
+    },
+    "deploymentTimestamp": {
+      "type": "string",
+      "defaultValue": "[utcNow('yyyy-MM-dd')]",
+      "metadata": {
+        "description": "Deployment timestamp for tagging"
+      }
+    }
+  },
+  "variables": {
+    "uniqueSuffix": "[uniqueString(resourceGroup().id, parameters('environmentSuffix'))]",
+    "projectPrefix": "zava",
+    "resourceNames": {
+      "logAnalytics": "[format('{0}-{1}-la', variables('uniqueSuffix'), parameters('environmentSuffix'))]",
+      "appInsights": "[format('{0}-{1}-ai', variables('uniqueSuffix'), parameters('environmentSuffix'))]",
+      "cosmosDb": "[format('{0}-{1}-cosmosdb', variables('uniqueSuffix'), parameters('environmentSuffix'))]",
+      "cosmosDatabase": "[variables('projectPrefix')]",
+      "cosmosContainer": "product_catalog",
+      "storageAccount": "[format('st{0}{1}', variables('uniqueSuffix'), parameters('environmentSuffix'))]",
+      "storageContainer": "[variables('projectPrefix')]",
+      "aiServices": "[format('aif-{0}-{1}', variables('uniqueSuffix'), parameters('environmentSuffix'))]",
+      "aiSearch": "[format('{0}-{1}-search', variables('uniqueSuffix'), parameters('environmentSuffix'))]",
+      "aiSearchIndex": "[format('{0}-product-catalog', variables('projectPrefix'))]",
+      "containerRegistry": "[format('acr{0}{1}', variables('uniqueSuffix'), parameters('environmentSuffix'))]",
+      "appServicePlan": "[format('{0}-{1}-asp', variables('uniqueSuffix'), parameters('environmentSuffix'))]",
+      "webApp": "[format('{0}-{1}-app', variables('uniqueSuffix'), parameters('environmentSuffix'))]",
+      "a2aWebApp": "[format('{0}-a2a-{1}-{2}', variables('projectPrefix'), parameters('environmentSuffix'), variables('uniqueSuffix'))]"
+    },
+    "commonTags": {
+      "Environment": "[parameters('environmentSuffix')]",
+      "Project": "TechWorkshop-L300-AI-Agents",
+      "Repository": "[parameters('repositoryName')]",
+      "ManagedBy": "GitHubActions",
+      "CostCenter": "Engineering",
+      "Owner": "TechWorkshop-Team",
+      "CreatedDate": "[parameters('deploymentTimestamp')]"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('resourceNames').logAnalytics]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "retentionInDays": 90,
+        "workspaceCapping": {
+          "dailyQuotaGb": 10
+        },
+        "publicNetworkAccessForIngestion": "Enabled",
+        "publicNetworkAccessForQuery": "Enabled"
+      },
+      "metadata": {
+        "description": "Creates Azure Log Analytics workspace for monitoring."
+      }
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[variables('resourceNames').appInsights]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "kind": "web",
+      "properties": {
+        "Application_Type": "web",
+        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('resourceNames').logAnalytics)]",
+        "RetentionInDays": 90,
+        "publicNetworkAccessForIngestion": "Enabled",
+        "publicNetworkAccessForQuery": "Enabled"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('resourceNames').logAnalytics)]"
+      ],
+      "metadata": {
+        "description": "Creates Azure Application Insights for application monitoring."
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('resourceNames').storageAccount]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "accessTier": "Hot",
+        "minimumTlsVersion": "TLS1_2",
+        "supportsHttpsTrafficOnly": true,
+        "allowBlobPublicAccess": false,
+        "allowSharedKeyAccess": true,
+        "publicNetworkAccess": "Enabled"
+      },
+      "metadata": {
+        "description": "Creates Azure Storage account for file storage."
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}/default/{1}', variables('resourceNames').storageAccount, variables('resourceNames').storageContainer)]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('resourceNames').storageAccount)]"
+      ],
+      "metadata": {
+        "description": "Creates blob container for Zava data."
+      }
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts",
+      "apiVersion": "2023-04-15",
+      "name": "[variables('resourceNames').cosmosDb]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "kind": "GlobalDocumentDB",
+      "properties": {
+        "consistencyPolicy": {
+          "defaultConsistencyLevel": "Session"
+        },
+        "databaseAccountOfferType": "Standard",
+        "locations": [
+          {
+            "locationName": "[parameters('location')]",
+            "failoverPriority": 0,
+            "isZoneRedundant": false
+          }
+        ],
+        "disableLocalAuth": false,
+        "publicNetworkAccess": "Enabled"
+      },
+      "metadata": {
+        "description": "Creates Azure Cosmos DB account for product data."
+      }
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+      "apiVersion": "2023-04-15",
+      "name": "[format('{0}/{1}', variables('resourceNames').cosmosDb, variables('resourceNames').cosmosDatabase)]",
+      "properties": {
+        "resource": {
+          "id": "[variables('resourceNames').cosmosDatabase]"
+        },
+        "options": {
+          "throughput": 400
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('resourceNames').cosmosDb)]"
+      ],
+      "metadata": {
+        "description": "Creates Cosmos DB database for Zava."
+      }
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+      "apiVersion": "2023-04-15",
+      "name": "[format('{0}/{1}/{2}', variables('resourceNames').cosmosDb, variables('resourceNames').cosmosDatabase, variables('resourceNames').cosmosContainer)]",
+      "properties": {
+        "resource": {
+          "id": "[variables('resourceNames').cosmosContainer]",
+          "partitionKey": {
+            "paths": [
+              "/category"
+            ],
+            "kind": "Hash"
+          },
+          "indexingPolicy": {
+            "indexingMode": "consistent",
+            "includedPaths": [
+              {
+                "path": "/*"
+              }
+            ]
+          }
+        },
+        "options": {
+          "throughput": 400
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', variables('resourceNames').cosmosDb, variables('resourceNames').cosmosDatabase)]"
+      ],
+      "metadata": {
+        "description": "Creates Cosmos DB container for product catalog."
+      }
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2023-05-01",
+      "name": "[variables('resourceNames').aiServices]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "sku": {
+        "name": "S0"
+      },
+      "kind": "AIServices",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "customSubDomainName": "[variables('resourceNames').aiServices]",
+        "disableLocalAuth": false,
+        "publicNetworkAccess": "Enabled"
+      },
+      "metadata": {
+        "description": "Creates Azure AI Services (OpenAI) account."
+      }
+    },
+    {
+      "type": "Microsoft.Search/searchServices",
+      "apiVersion": "2023-11-01",
+      "name": "[variables('resourceNames').aiSearch]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "sku": {
+        "name": "standard"
+      },
+      "properties": {
+        "replicaCount": 1,
+        "partitionCount": 1,
+        "publicNetworkAccess": "enabled"
+      },
+      "metadata": {
+        "description": "Creates Azure AI Search service for product search."
+      }
+    },
+    {
+      "type": "Microsoft.ContainerRegistry/registries",
+      "apiVersion": "2023-07-01",
+      "name": "[variables('resourceNames').containerRegistry]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "sku": {
+        "name": "Standard"
+      },
+      "properties": {
+        "adminUserEnabled": true,
+        "publicNetworkAccess": "Enabled",
+        "policies": {
+          "retentionPolicy": {
+            "days": 30,
+            "status": "enabled"
+          }
+        }
+      },
+      "metadata": {
+        "description": "Creates Azure Container Registry for Docker images."
+      }
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('resourceNames').appServicePlan]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "sku": {
+        "name": "B2",
+        "tier": "Basic",
+        "capacity": 1
+      },
+      "kind": "linux",
+      "properties": {
+        "reserved": true
+      },
+      "metadata": {
+        "description": "Creates Azure App Service Plan for web hosting."
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('resourceNames').webApp]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('resourceNames').appServicePlan)]",
+        "httpsOnly": true,
+        "clientAffinityEnabled": false,
+        "siteConfig": {
+          "linuxFxVersion": "[format('DOCKER|{0}.azurecr.io/zava-app:latest', variables('resourceNames').containerRegistry)]",
+          "http20Enabled": true,
+          "minTlsVersion": "1.2",
+          "ftpsState": "FtpsOnly",
+          "acrUseManagedIdentityCreds": true,
+          "appSettings": [
+            {
+              "name": "WEBSITES_ENABLE_APP_SERVICE_STORAGE",
+              "value": "false"
+            },
+            {
+              "name": "DOCKER_REGISTRY_SERVER_URL",
+              "value": "[format('https://{0}.azurecr.io', variables('resourceNames').containerRegistry)]"
+            },
+            {
+              "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+              "value": "[reference(resourceId('Microsoft.Insights/components', variables('resourceNames').appInsights), '2020-02-02').InstrumentationKey]"
+            },
+            {
+              "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+              "value": "[reference(resourceId('Microsoft.Insights/components', variables('resourceNames').appInsights), '2020-02-02').ConnectionString]"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', variables('resourceNames').appInsights)]",
+        "[resourceId('Microsoft.Web/serverfarms', variables('resourceNames').appServicePlan)]",
+        "[resourceId('Microsoft.ContainerRegistry/registries', variables('resourceNames').containerRegistry)]"
+      ],
+      "metadata": {
+        "description": "Creates Azure Web App for legacy application."
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('resourceNames').a2aWebApp]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('resourceNames').appServicePlan)]",
+        "httpsOnly": true,
+        "clientAffinityEnabled": false,
+        "siteConfig": {
+          "linuxFxVersion": "[format('DOCKER|{0}.azurecr.io/zava-a2a-app:latest', variables('resourceNames').containerRegistry)]",
+          "http20Enabled": true,
+          "minTlsVersion": "1.2",
+          "ftpsState": "FtpsOnly",
+          "acrUseManagedIdentityCreds": true,
+          "appSettings": [
+            {
+              "name": "WEBSITES_ENABLE_APP_SERVICE_STORAGE",
+              "value": "false"
+            },
+            {
+              "name": "DOCKER_REGISTRY_SERVER_URL",
+              "value": "[format('https://{0}.azurecr.io', variables('resourceNames').containerRegistry)]"
+            },
+            {
+              "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+              "value": "[reference(resourceId('Microsoft.Insights/components', variables('resourceNames').appInsights), '2020-02-02').InstrumentationKey]"
+            },
+            {
+              "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+              "value": "[reference(resourceId('Microsoft.Insights/components', variables('resourceNames').appInsights), '2020-02-02').ConnectionString]"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', variables('resourceNames').appInsights)]",
+        "[resourceId('Microsoft.Web/serverfarms', variables('resourceNames').appServicePlan)]",
+        "[resourceId('Microsoft.ContainerRegistry/registries', variables('resourceNames').containerRegistry)]"
+      ],
+      "metadata": {
+        "description": "Creates Azure Web App for A2A (Agent-to-Agent) application."
+      }
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.Storage/storageAccounts/{0}', variables('resourceNames').storageAccount)]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('resourceNames').storageAccount), parameters('servicePrincipalObjectId'), 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
+        "principalId": "[parameters('servicePrincipalObjectId')]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('resourceNames').storageAccount)]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.DocumentDB/databaseAccounts/{0}', variables('resourceNames').cosmosDb)]",
+      "name": "[guid(resourceId('Microsoft.DocumentDB/databaseAccounts', variables('resourceNames').cosmosDb), parameters('servicePrincipalObjectId'), '5bd9cd88-fe45-4216-938b-f97437e15450')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5bd9cd88-fe45-4216-938b-f97437e15450')]",
+        "principalId": "[parameters('servicePrincipalObjectId')]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('resourceNames').cosmosDb)]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.Search/searchServices/{0}', variables('resourceNames').aiSearch)]",
+      "name": "[guid(resourceId('Microsoft.Search/searchServices', variables('resourceNames').aiSearch), parameters('servicePrincipalObjectId'), '7ca78c08-252a-4471-8644-bb5ff32d4ba0')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7ca78c08-252a-4471-8644-bb5ff32d4ba0')]",
+        "principalId": "[parameters('servicePrincipalObjectId')]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Search/searchServices', variables('resourceNames').aiSearch)]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.ContainerRegistry/registries/{0}', variables('resourceNames').containerRegistry)]",
+      "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', variables('resourceNames').containerRegistry), parameters('servicePrincipalObjectId'), '8311e382-0749-4cb8-b61a-304f252e45ec')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8311e382-0749-4cb8-b61a-304f252e45ec')]",
+        "principalId": "[parameters('servicePrincipalObjectId')]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ContainerRegistry/registries', variables('resourceNames').containerRegistry)]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.ContainerRegistry/registries/{0}', variables('resourceNames').containerRegistry)]",
+      "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', variables('resourceNames').containerRegistry), variables('resourceNames').webApp, 'acrpull-webapp')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
+        "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('resourceNames').webApp), '2023-01-01', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ContainerRegistry/registries', variables('resourceNames').containerRegistry)]",
+        "[resourceId('Microsoft.Web/sites', variables('resourceNames').webApp)]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.ContainerRegistry/registries/{0}', variables('resourceNames').containerRegistry)]",
+      "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', variables('resourceNames').containerRegistry), variables('resourceNames').a2aWebApp, 'acrpull-a2a')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
+        "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('resourceNames').a2aWebApp), '2023-01-01', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('resourceNames').a2aWebApp)]",
+        "[resourceId('Microsoft.ContainerRegistry/registries', variables('resourceNames').containerRegistry)]"
+      ]
+    }
+  ],
+  "outputs": {
+    "resourceGroupName": {
+      "type": "string",
+      "metadata": {
+        "description": "Primary resource group name"
+      },
+      "value": "[resourceGroup().name]"
+    },
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "Primary deployment location"
+      },
+      "value": "[parameters('location')]"
+    },
+    "aiStudioLocation": {
+      "type": "string",
+      "metadata": {
+        "description": "AI Studio deployment location"
+      },
+      "value": "[parameters('aiStudioLocation')]"
+    },
+    "storageAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Storage account name"
+      },
+      "value": "[variables('resourceNames').storageAccount]"
+    },
+    "storageConnectionString": {
+      "type": "string",
+      "metadata": {
+        "description": "Storage account connection string"
+      },
+      "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', variables('resourceNames').storageAccount, listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('resourceNames').storageAccount), '2023-01-01').keys[0].value, environment().suffixes.storage)]"
+    },
+    "blobContainerName": {
+      "type": "string",
+      "metadata": {
+        "description": "Blob container name"
+      },
+      "value": "[variables('resourceNames').storageContainer]"
+    },
+    "cosmosEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Cosmos DB endpoint"
+      },
+      "value": "[reference(resourceId('Microsoft.DocumentDB/databaseAccounts', variables('resourceNames').cosmosDb), '2023-04-15').documentEndpoint]"
+    },
+    "cosmosKey": {
+      "type": "string",
+      "metadata": {
+        "description": "Cosmos DB primary key"
+      },
+      "value": "[listKeys(resourceId('Microsoft.DocumentDB/databaseAccounts', variables('resourceNames').cosmosDb), '2023-04-15').primaryMasterKey]"
+    },
+    "cosmosDatabaseName": {
+      "type": "string",
+      "metadata": {
+        "description": "Cosmos DB database name"
+      },
+      "value": "[variables('resourceNames').cosmosDatabase]"
+    },
+    "cosmosContainerName": {
+      "type": "string",
+      "metadata": {
+        "description": "Cosmos DB container name"
+      },
+      "value": "[variables('resourceNames').cosmosContainer]"
+    },
+    "searchEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "AI Search endpoint"
+      },
+      "value": "[format('https://{0}.search.windows.net', variables('resourceNames').aiSearch)]"
+    },
+    "searchKey": {
+      "type": "string",
+      "metadata": {
+        "description": "AI Search admin key"
+      },
+      "value": "[listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resourceNames').aiSearch), '2023-11-01').primaryKey]"
+    },
+    "searchIndexName": {
+      "type": "string",
+      "metadata": {
+        "description": "AI Search index name"
+      },
+      "value": "[variables('resourceNames').aiSearchIndex]"
+    },
+    "openAiEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure OpenAI endpoint"
+      },
+      "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', variables('resourceNames').aiServices), '2023-05-01').endpoint]"
+    },
+    "openAiKey": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure OpenAI key"
+      },
+      "value": "[listKeys(resourceId('Microsoft.CognitiveServices/accounts', variables('resourceNames').aiServices), '2023-05-01').key1]"
+    },
+    "containerRegistryName": {
+      "type": "string",
+      "metadata": {
+        "description": "Container Registry name"
+      },
+      "value": "[variables('resourceNames').containerRegistry]"
+    },
+    "containerRegistryLoginServer": {
+      "type": "string",
+      "metadata": {
+        "description": "Container Registry login server"
+      },
+      "value": "[reference(resourceId('Microsoft.ContainerRegistry/registries', variables('resourceNames').containerRegistry), '2023-07-01').loginServer]"
+    },
+    "appInsightsConnectionString": {
+      "type": "string",
+      "metadata": {
+        "description": "Application Insights connection string"
+      },
+      "value": "[reference(resourceId('Microsoft.Insights/components', variables('resourceNames').appInsights), '2020-02-02').ConnectionString]"
+    },
+    "appInsightsInstrumentationKey": {
+      "type": "string",
+      "metadata": {
+        "description": "Application Insights instrumentation key"
+      },
+      "value": "[reference(resourceId('Microsoft.Insights/components', variables('resourceNames').appInsights), '2020-02-02').InstrumentationKey]"
+    },
+    "webAppName": {
+      "type": "string",
+      "metadata": {
+        "description": "Primary web app name"
+      },
+      "value": "[variables('resourceNames').webApp]"
+    },
+    "webAppUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Primary web app URL"
+      },
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', variables('resourceNames').webApp), '2023-01-01').defaultHostName)]"
+    },
+    "a2aWebAppName": {
+      "type": "string",
+      "metadata": {
+        "description": "A2A web app name"
+      },
+      "value": "[variables('resourceNames').a2aWebApp]"
+    },
+    "a2aWebAppUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "A2A web app URL"
+      },
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', variables('resourceNames').a2aWebApp), '2023-01-01').defaultHostName)]"
+    },
+    "resourceNaming": {
+      "type": "object",
+      "metadata": {
+        "description": "Resource naming convention used"
+      },
+      "value": "[variables('resourceNames')]"
+    },
+    "commonTags": {
+      "type": "object",
+      "metadata": {
+        "description": "Common tags applied to resources"
+      },
+      "value": "[variables('commonTags')]"
+    }
+  }
+}

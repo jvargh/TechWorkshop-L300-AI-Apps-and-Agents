@@ -1,0 +1,253 @@
+# ====================================
+# CENTRALIZED INFRASTRUCTURE VARIABLES
+# ====================================
+# This YAML file contains all configurable variables for the infrastructure
+# deployment including regions, naming conventions, and resource group names.
+# This file is referenced by GitHub Actions workflows and deployment scripts.
+
+# ====================================
+# AZURE REGIONS CONFIGURATION
+# ====================================
+locations:
+  # Primary region for most resources
+  primary: "centralus"
+  
+  # AI Studio region (must support AI Studio services)
+  # Supported regions: eastus2, westeurope, westus3
+  ai_studio: "eastus2"
+  
+  # Alternative regions for multi-region deployments
+  alternatives:
+    - "eastus2" 
+    - "westus3"
+    - "westeurope"
+
+# ====================================
+# RESOURCE GROUP NAMING
+# ====================================
+resource_groups:
+  # Pattern: {base-name}-{environment}
+  primary: "techworkshop-l300-ai-agents"
+  
+  # Pattern: azureai-{environment}-rg
+  ai_studio: "azureai"
+
+# ====================================
+# NAMING CONVENTION SETTINGS
+# ====================================
+naming:
+  # Project identifier used in resource names
+  project_prefix: "zava"
+  
+  # Naming patterns following Azure best practices
+  patterns:
+    storage_account: "st{uniqueid}{env}"           # Max 24 chars, lowercase only
+    cosmos_db: "{uniqueid}-{env}-cosmosdb"         # Descriptive naming
+    web_app: "{uniqueid}-{env}-app"               # Environment separation  
+    container_registry: "acr{uniqueid}{env}"      # No hyphens allowed
+    ai_services: "aif-{uniqueid}-{env}"           # AI prefix for clarity
+    search_service: "{uniqueid}-{env}-search"     # Purpose-based naming
+    log_analytics: "{uniqueid}-{env}-la"          # Standard LA suffix
+    app_insights: "{uniqueid}-{env}-ai"           # Standard AI suffix
+    app_service_plan: "{uniqueid}-{env}-asp"      # Standard ASP suffix
+    ai_studio_hub: "admin-{uniqueid}-{location}"  # Location-based for AI Studio
+
+# ====================================
+# ENVIRONMENT CONFIGURATIONS
+# ====================================
+environments:
+  dev:
+    # Resource configurations for development
+    cosmos_db:
+      throughput: 400
+      enable_free_tier: true
+      backup_interval_hours: 24
+    
+    app_service_plan:
+      sku: "F1"      # Free tier
+      capacity: 1
+    
+    ai_services:
+      sku: "S0"      # Standard tier
+    
+    ai_search:
+      sku: "free"    # Free tier
+      capacity: 1
+      replicas: 1
+    
+    # Security settings for dev
+    security:
+      enable_private_endpoints: false
+      allowed_ip_ranges: ["*"]  # Open access for development
+      
+  staging:
+    # Resource configurations for staging
+    cosmos_db:
+      throughput: 800
+      enable_free_tier: false
+      backup_interval_hours: 12
+    
+    app_service_plan:
+      sku: "S1"      # Standard tier
+      capacity: 1
+    
+    ai_services:
+      sku: "S0"
+    
+    ai_search:
+      sku: "basic"
+      capacity: 1
+      replicas: 1
+    
+    # Security settings for staging
+    security:
+      enable_private_endpoints: false
+      allowed_ip_ranges: []  # Restricted access
+      
+  prod:
+    # Resource configurations for production
+    cosmos_db:
+      throughput: 1000
+      enable_free_tier: false
+      backup_interval_hours: 6
+    
+    app_service_plan:
+      sku: "P1v3"    # Premium tier
+      capacity: 2
+    
+    ai_services:
+      sku: "S0"
+    
+    ai_search:
+      sku: "standard"
+      capacity: 2
+      replicas: 2
+    
+    # Security settings for production
+    security:
+      enable_private_endpoints: true
+      allowed_ip_ranges: []  # Highly restricted
+
+# ====================================
+# COMMON RESOURCE TAGS
+# ====================================
+tags:
+  # Standard tags applied to all resources
+  project: "TechWorkshop-L300-AI-Agents"
+  managed_by: "GitHubActions"
+  cost_center: "Engineering"
+  owner: "TechWorkshop-Team"
+  
+  # Compliance tags
+  compliance:
+    data_classification: "internal"
+    backup_required: true
+    monitoring_required: true
+
+# ====================================
+# SECURITY & COMPLIANCE SETTINGS
+# ====================================
+security:
+  # Diagnostic logging settings
+  diagnostics:
+    enable_for_all_resources: true
+    log_retention_days: 90
+    
+  # Key rotation policies
+  key_rotation:
+    storage_account_days: 90
+    service_principal_days: 180
+    
+  # Network security
+  network:
+    enable_ddos_protection: false  # Costly - enable for prod only
+    enable_firewall_rules: true
+    
+  # Backup and recovery
+  backup:
+    enabled: true
+    retention_days: 30
+    cross_region_replication: false  # Enable for prod
+
+# ====================================
+# WORKFLOW CONFIGURATION
+# ====================================
+workflow:
+  # GitHub Actions settings
+  github_actions:
+    # Runner configurations
+    runner_os: "ubuntu-latest"
+    
+    # Timeout settings (minutes)
+    timeouts:
+      infrastructure_deployment: 60
+      application_deployment: 30
+      testing: 15
+    
+    # Retry settings
+    retries:
+      max_attempts: 3
+      delay_seconds: 30
+  
+  # Deployment phases
+  deployment_phases:
+    - name: "resource-groups"
+      timeout_minutes: 5
+    - name: "core-infrastructure" 
+      timeout_minutes: 30
+    - name: "ai-studio"
+      timeout_minutes: 20
+    - name: "secrets-configuration"
+      timeout_minutes: 5
+
+# ====================================
+# DATABASE CONFIGURATIONS
+# ====================================
+databases:
+  cosmos_db:
+    # Database and container names
+    database_name: "zava"
+    containers:
+      - name: "product_catalog"
+        partition_key: "/id"
+        throughput: 400
+      
+  # Search index configurations  
+  search:
+    indexes:
+      - name: "zava-product-catalog"
+        fields: ["id", "name", "description", "category", "price"]
+
+# ====================================
+# APPLICATION CONFIGURATIONS
+# ====================================
+applications:
+  web_app:
+    # Application settings
+    runtime_stack: "PYTHON|3.11"
+    always_on: true
+    
+  a2a_app:
+    # Agent-to-Agent application settings
+    runtime_stack: "PYTHON|3.11"
+    always_on: false  # Cost optimization for dev
+
+# ====================================
+# MONITORING & OBSERVABILITY
+# ====================================
+monitoring:
+  # Application Insights configuration
+  app_insights:
+    sampling_percentage: 100
+    retention_days: 90
+    
+  # Log Analytics configuration
+  log_analytics:
+    retention_days: 30
+    daily_quota_gb: 1  # Cost control
+    
+  # Alerting rules
+  alerts:
+    enable_cost_alerts: true
+    cost_threshold_usd: 100
+    enable_performance_alerts: true

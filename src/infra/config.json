@@ -1,0 +1,228 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.38.33.27573",
+      "templateHash": "17795082548515599810"
+    }
+  },
+  "parameters": {
+    "primaryLocation": {
+      "type": "string",
+      "defaultValue": "centralus",
+      "metadata": {
+        "description": "Primary Azure region for most resources"
+      }
+    },
+    "aiStudioLocation": {
+      "type": "string",
+      "defaultValue": "eastus2",
+      "metadata": {
+        "description": "Azure region for AI Studio (must support AI Studio services)"
+      }
+    },
+    "environmentSuffix": {
+      "type": "string",
+      "defaultValue": "dev",
+      "metadata": {
+        "description": "Environment suffix (dev/staging/prod)"
+      }
+    },
+    "servicePrincipalObjectId": {
+      "type": "string",
+      "metadata": {
+        "description": "Service principal object ID for role assignments"
+      }
+    },
+    "repositoryName": {
+      "type": "string",
+      "defaultValue": "TechWorkshop-L300-AI-Apps-and-agents",
+      "metadata": {
+        "description": "GitHub repository name for tagging"
+      }
+    },
+    "deploymentTimestamp": {
+      "type": "string",
+      "defaultValue": "[utcNow('yyyy-MM-dd')]",
+      "metadata": {
+        "description": "Deployment timestamp for tagging"
+      }
+    }
+  },
+  "variables": {
+    "resourceGroupConfig": {
+      "primary": "[format('techworkshop-l300-ai-agents-{0}', parameters('environmentSuffix'))]",
+      "aiStudio": "[format('azureai-{0}-rg', parameters('environmentSuffix'))]"
+    },
+    "namingConfig": {
+      "projectPrefix": "zava",
+      "uniqueSuffix": "[uniqueString(resourceGroup().id, parameters('environmentSuffix'))]",
+      "patterns": {
+        "storage": "st{uniqueid}{env}",
+        "cosmosDb": "{uniqueid}-{env}-cosmosdb",
+        "webApp": "{uniqueid}-{env}-app",
+        "registry": "acr{uniqueid}{env}",
+        "aiServices": "aif-{uniqueid}-{env}",
+        "search": "{uniqueid}-{env}-search",
+        "analytics": "{uniqueid}-{env}-la",
+        "insights": "{uniqueid}-{env}-ai",
+        "servicePlan": "{uniqueid}-{env}-asp"
+      }
+    },
+    "resourceNames": {
+      "logAnalytics": "[format('{0}-{1}-la', variables('namingConfig').uniqueSuffix, parameters('environmentSuffix'))]",
+      "appInsights": "[format('{0}-{1}-ai', variables('namingConfig').uniqueSuffix, parameters('environmentSuffix'))]",
+      "cosmosDb": "[format('{0}-{1}-cosmosdb', variables('namingConfig').uniqueSuffix, parameters('environmentSuffix'))]",
+      "cosmosDatabase": "[variables('namingConfig').projectPrefix]",
+      "cosmosContainer": "product_catalog",
+      "storageAccount": "[format('st{0}{1}', variables('namingConfig').uniqueSuffix, parameters('environmentSuffix'))]",
+      "storageContainer": "[variables('namingConfig').projectPrefix]",
+      "aiServices": "[format('aif-{0}-{1}', variables('namingConfig').uniqueSuffix, parameters('environmentSuffix'))]",
+      "aiSearch": "[format('{0}-{1}-search', variables('namingConfig').uniqueSuffix, parameters('environmentSuffix'))]",
+      "aiSearchIndex": "[format('{0}-product-catalog', variables('namingConfig').projectPrefix)]",
+      "aiStudioHub": "[format('admin-{0}-{1}', variables('namingConfig').uniqueSuffix, parameters('aiStudioLocation'))]",
+      "aiStudioProject": "[format('admin-{0}-{1}_project', variables('namingConfig').uniqueSuffix, parameters('aiStudioLocation'))]",
+      "containerRegistry": "[format('acr{0}{1}', variables('namingConfig').uniqueSuffix, parameters('environmentSuffix'))]",
+      "appServicePlan": "[format('{0}-{1}-asp', variables('namingConfig').uniqueSuffix, parameters('environmentSuffix'))]",
+      "webApp": "[format('{0}-{1}-app', variables('namingConfig').uniqueSuffix, parameters('environmentSuffix'))]",
+      "a2aWebApp": "[format('{0}-a2a-{1}-{2}', variables('namingConfig').projectPrefix, parameters('environmentSuffix'), variables('namingConfig').uniqueSuffix)]"
+    },
+    "environmentSettings": {
+      "dev": {
+        "cosmosDb": {
+          "throughput": 400,
+          "enableFreeTier": true
+        },
+        "appServicePlan": {
+          "sku": "F1",
+          "capacity": 1
+        },
+        "aiServices": {
+          "sku": "S0"
+        },
+        "aiSearch": {
+          "sku": "free",
+          "capacity": 1,
+          "replicas": 1
+        }
+      },
+      "staging": {
+        "cosmosDb": {
+          "throughput": 800,
+          "enableFreeTier": false
+        },
+        "appServicePlan": {
+          "sku": "S1",
+          "capacity": 1
+        },
+        "aiServices": {
+          "sku": "S0"
+        },
+        "aiSearch": {
+          "sku": "basic",
+          "capacity": 1,
+          "replicas": 1
+        }
+      },
+      "prod": {
+        "cosmosDb": {
+          "throughput": 1000,
+          "enableFreeTier": false
+        },
+        "appServicePlan": {
+          "sku": "P1v3",
+          "capacity": 2
+        },
+        "aiServices": {
+          "sku": "S0"
+        },
+        "aiSearch": {
+          "sku": "standard",
+          "capacity": 2,
+          "replicas": 2
+        }
+      }
+    },
+    "resourceTags": {
+      "Environment": "[parameters('environmentSuffix')]",
+      "Project": "TechWorkshop-L300-AI-Agents",
+      "Repository": "[parameters('repositoryName')]",
+      "ManagedBy": "GitHubActions",
+      "CostCenter": "Engineering",
+      "Owner": "TechWorkshop-Team",
+      "CreatedDate": "[parameters('deploymentTimestamp')]"
+    },
+    "securitySettings": {
+      "enableDiagnostics": true,
+      "network": {
+        "enablePrivateEndpoints": "[equals(parameters('environmentSuffix'), 'prod')]",
+        "allowedIpRanges": "[if(equals(parameters('environmentSuffix'), 'dev'), createArray('*'), createArray())]"
+      },
+      "backup": {
+        "cosmosDb": {
+          "backupIntervalInMinutes": "[if(equals(parameters('environmentSuffix'), 'prod'), 60, 240)]",
+          "backupRetentionIntervalInHours": "[if(equals(parameters('environmentSuffix'), 'prod'), 720, 168)]"
+        }
+      },
+      "keyRotation": {
+        "storageAccountKeys": "[if(equals(parameters('environmentSuffix'), 'prod'), 90, 365)]"
+      }
+    }
+  },
+  "resources": [],
+  "outputs": {
+    "locations": {
+      "type": "object",
+      "value": {
+        "primary": "[parameters('primaryLocation')]",
+        "aiStudio": "[parameters('aiStudioLocation')]"
+      }
+    },
+    "resourceGroupNames": {
+      "type": "object",
+      "value": "[variables('resourceGroupConfig')]"
+    },
+    "resourceNames": {
+      "type": "object",
+      "value": "[variables('resourceNames')]"
+    },
+    "environmentConfig": {
+      "type": "object",
+      "value": "[variables('environmentSettings')[parameters('environmentSuffix')]]"
+    },
+    "commonTags": {
+      "type": "object",
+      "value": "[variables('resourceTags')]"
+    },
+    "securitySettings": {
+      "type": "object",
+      "value": "[variables('securitySettings')]"
+    },
+    "namingConventions": {
+      "type": "object",
+      "value": "[variables('namingConfig')]"
+    },
+    "primaryLocation": {
+      "type": "string",
+      "value": "[parameters('primaryLocation')]"
+    },
+    "aiStudioLocation": {
+      "type": "string",
+      "value": "[parameters('aiStudioLocation')]"
+    },
+    "environmentSuffix": {
+      "type": "string",
+      "value": "[parameters('environmentSuffix')]"
+    },
+    "servicePrincipalObjectId": {
+      "type": "string",
+      "value": "[parameters('servicePrincipalObjectId')]"
+    },
+    "repositoryName": {
+      "type": "string",
+      "value": "[parameters('repositoryName')]"
+    }
+  }
+}
