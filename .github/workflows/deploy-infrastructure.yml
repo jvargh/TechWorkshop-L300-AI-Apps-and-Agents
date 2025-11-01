@@ -23,6 +23,12 @@ on:
         default: true
         type: boolean
 
+# Permissions required for the workflow
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
 env:
   ENVIRONMENT: ${{ github.event.inputs.environment }}
   # Configuration is now centralized in infrastructure-variables.yml
@@ -381,20 +387,52 @@ jobs:
     - name: Update GitHub Secrets
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      continue-on-error: true
       run: |
         echo "🔐 Updating GitHub Secrets with deployment outputs..."
         
-        # Core resource information
-        gh secret set AZURE_RESOURCE_GROUP --body "${{ steps.extract.outputs.resource-group }}"
-        gh secret set AZURE_CONTAINER_REGISTRY --body "${{ steps.extract.outputs.container-registry }}"
-        gh secret set AZURE_APP_SERVICE_NAME --body "${{ steps.extract.outputs.web-app-name }}"
-        gh secret set AZURE_A2A_APP_SERVICE_NAME --body "${{ steps.extract.outputs.a2a-web-app-name }}"
-        gh secret set STORAGE_ACCOUNT_NAME --body "${{ steps.extract.outputs.storage-account }}"
+        # Check if we have the necessary permissions
+        if ! gh secret list >/dev/null 2>&1; then
+          echo "⚠️  Warning: Unable to update GitHub secrets due to permissions."
+          echo "📋 Please manually set the following secrets in your repository settings:"
+          echo ""
+          echo "AZURE_RESOURCE_GROUP=${{ steps.extract.outputs.resource-group }}"
+          echo "AZURE_CONTAINER_REGISTRY=${{ steps.extract.outputs.container-registry }}"
+          echo "AZURE_APP_SERVICE_NAME=${{ steps.extract.outputs.web-app-name }}"
+          echo "AZURE_A2A_APP_SERVICE_NAME=${{ steps.extract.outputs.a2a-web-app-name }}"
+          echo "STORAGE_ACCOUNT_NAME=${{ steps.extract.outputs.storage-account }}"
+          echo "AZURE_AI_AGENT_ENDPOINT=${{ steps.extract.outputs.ai-studio-endpoint }}"
+          echo "AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME=gpt-4o-mini"
+          echo "AZURE_AI_AGENT_API_VERSION=2024-12-01-preview"
+          echo ""
+          echo "ℹ️  Go to: Settings > Secrets and variables > Actions > New repository secret"
+          echo "🔗 https://github.com/${{ github.repository }}/settings/secrets/actions"
+          exit 0
+        fi
+        
+        # Core resource information (only set if values are not empty)
+        if [ -n "${{ steps.extract.outputs.resource-group }}" ]; then
+          gh secret set AZURE_RESOURCE_GROUP --body "${{ steps.extract.outputs.resource-group }}"
+        fi
+        if [ -n "${{ steps.extract.outputs.container-registry }}" ]; then
+          gh secret set AZURE_CONTAINER_REGISTRY --body "${{ steps.extract.outputs.container-registry }}"
+        fi
+        if [ -n "${{ steps.extract.outputs.web-app-name }}" ]; then
+          gh secret set AZURE_APP_SERVICE_NAME --body "${{ steps.extract.outputs.web-app-name }}"
+        fi
+        if [ -n "${{ steps.extract.outputs.a2a-web-app-name }}" ]; then
+          gh secret set AZURE_A2A_APP_SERVICE_NAME --body "${{ steps.extract.outputs.a2a-web-app-name }}"
+        fi
+        if [ -n "${{ steps.extract.outputs.storage-account }}" ]; then
+          gh secret set STORAGE_ACCOUNT_NAME --body "${{ steps.extract.outputs.storage-account }}"
+        fi
         
         # AI Studio configuration
-        gh secret set AZURE_AI_AGENT_ENDPOINT --body "${{ steps.extract.outputs.ai-studio-endpoint }}"
-        gh secret set AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME --body "gpt-4o-mini"
-        gh secret set AZURE_AI_AGENT_API_VERSION --body "2024-12-01-preview"
+        if [ -n "${{ steps.extract.outputs.ai-studio-endpoint }}" ]; then
+          gh secret set AZURE_AI_AGENT_ENDPOINT --body "${{ steps.extract.outputs.ai-studio-endpoint }}"
+          gh secret set AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME --body "gpt-4o-mini"
+          gh secret set AZURE_AI_AGENT_API_VERSION --body "2024-12-01-preview"
+        fi
         
         echo "✅ GitHub secrets updated successfully"
 
