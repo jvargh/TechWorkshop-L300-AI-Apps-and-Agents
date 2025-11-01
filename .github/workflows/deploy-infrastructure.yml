@@ -489,10 +489,11 @@ jobs:
           exit 1
         fi
         
-        # Get service keys
+        # Get service keys (TEST MODE - just validate commands work)
         echo "Getting storage connection string for account: $STORAGE_ACCOUNT in RG: $RESOURCE_GROUP"
         STORAGE_CONN=$(az storage account show-connection-string --name "$STORAGE_ACCOUNT" --resource-group "$RESOURCE_GROUP" --query connectionString -o tsv)
-        gh secret set BLOB_CONNECTION_STRING --body "$STORAGE_CONN"
+        echo "✅ Storage connection string retrieved successfully"
+        # gh secret set BLOB_CONNECTION_STRING --body "$STORAGE_CONN"
         
         # Validate Cosmos DB account name
         if [ -z "$COSMOS_ACCOUNT" ] || [ "$COSMOS_ACCOUNT" = "null" ]; then
@@ -502,9 +503,11 @@ jobs:
         
         echo "Getting Cosmos DB key for account: $COSMOS_ACCOUNT"
         COSMOS_KEY=$(az cosmosdb keys list --name "$COSMOS_ACCOUNT" --resource-group "$RESOURCE_GROUP" --query primaryMasterKey -o tsv)
-        gh secret set COSMOS_KEY --body "$COSMOS_KEY"
+        echo "✅ Cosmos DB key retrieved successfully"
+        # gh secret set COSMOS_KEY --body "$COSMOS_KEY"
         COSMOS_ENDPOINT=$(az cosmosdb show --name "$COSMOS_ACCOUNT" --resource-group "$RESOURCE_GROUP" --query documentEndpoint -o tsv)
-        gh secret set COSMOS_ENDPOINT --body "$COSMOS_ENDPOINT"
+        echo "✅ Cosmos DB endpoint retrieved: $COSMOS_ENDPOINT"
+        # gh secret set COSMOS_ENDPOINT --body "$COSMOS_ENDPOINT"
         
         # Validate AI Search service name
         if [ -z "$SEARCH_SERVICE" ] || [ "$SEARCH_SERVICE" = "null" ]; then
@@ -514,33 +517,39 @@ jobs:
         
         echo "Getting AI Search key for service: $SEARCH_SERVICE"
         SEARCH_KEY=$(az search admin-key show --service-name "$SEARCH_SERVICE" --resource-group "$RESOURCE_GROUP" --query primaryKey -o tsv)
-        gh secret set SEARCH_KEY --body "$SEARCH_KEY"
+        echo "✅ AI Search key retrieved successfully"
+        # gh secret set SEARCH_KEY --body "$SEARCH_KEY"
         SEARCH_ENDPOINT="https://${SEARCH_SERVICE}.search.windows.net"
-        gh secret set SEARCH_ENDPOINT --body "$SEARCH_ENDPOINT"
+        echo "✅ AI Search endpoint: $SEARCH_ENDPOINT"
+        # gh secret set SEARCH_ENDPOINT --body "$SEARCH_ENDPOINT"
         
         echo "Getting OpenAI key..."
         OPENAI_KEY=$(az cognitiveservices account keys list --name $AI_SERVICES --resource-group $RESOURCE_GROUP --query key1 -o tsv)
-        gh secret set AZURE_OPENAI_KEY --body "$OPENAI_KEY"
+        echo "✅ OpenAI key retrieved successfully"
+        # gh secret set AZURE_OPENAI_KEY --body "$OPENAI_KEY"
         OPENAI_ENDPOINT=$(az cognitiveservices account show --name $AI_SERVICES --resource-group $RESOURCE_GROUP --query properties.endpoint -o tsv)
-        gh secret set AZURE_OPENAI_ENDPOINT --body "$OPENAI_ENDPOINT"
+        echo "✅ OpenAI endpoint: $OPENAI_ENDPOINT"
+        # gh secret set AZURE_OPENAI_ENDPOINT --body "$OPENAI_ENDPOINT"
         
         echo "Getting AI Studio keys..."
         AI_STUDIO_KEY=$(az cognitiveservices account keys list --name $AI_STUDIO_HUB --resource-group $AI_RESOURCE_GROUP --query key1 -o tsv)
-        gh secret set GPT_API_KEY --body "$AI_STUDIO_KEY"
+        echo "✅ AI Studio key retrieved successfully"
+        # gh secret set GPT_API_KEY --body "$AI_STUDIO_KEY"
         AI_STUDIO_ENDPOINT=$(az cognitiveservices account show --name $AI_STUDIO_HUB --resource-group $AI_RESOURCE_GROUP --query properties.endpoint -o tsv)
-        gh secret set GPT_ENDPOINT --body "$AI_STUDIO_ENDPOINT"
+        echo "✅ AI Studio endpoint: $AI_STUDIO_ENDPOINT"
+        # gh secret set GPT_ENDPOINT --body "$AI_STUDIO_ENDPOINT"
         
         echo "Getting Application Insights connection..."
         APP_INSIGHTS_CONN=$(az monitor app-insights component show --app $APP_INSIGHTS --resource-group $RESOURCE_GROUP --query connectionString -o tsv)
-        gh secret set APPLICATIONINSIGHTS_CONNECTION_STRING --body "$APP_INSIGHTS_CONN"
+        echo "✅ App Insights connection retrieved successfully"
+        # gh secret set APPLICATIONINSIGHTS_CONNECTION_STRING --body "$APP_INSIGHTS_CONN"
         
         # Set database/container names
-        gh secret set DATABASE_NAME --body "zava"
-        gh secret set CONTAINER_NAME --body "product_catalog"
         
-        echo "✅ All service keys retrieved and stored as secrets"
-
-  #============================================================================
+        # gh secret set DATABASE_NAME --body "zava"
+        # gh secret set CONTAINER_NAME --body "product_catalog"
+        
+        echo "✅ All service keys retrieved successfully (TEST MODE - secrets not set)"  #============================================================================
   # DATA DEPLOYMENT PHASE - DISABLED FOR TESTING
   #============================================================================
   deploy-sample-data:
