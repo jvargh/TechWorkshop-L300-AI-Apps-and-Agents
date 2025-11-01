@@ -204,8 +204,8 @@ jobs:
   #============================================================================
   deploy-resource-groups:
     runs-on: ubuntu-latest
-    needs: [prepare-deployment, destroy-infrastructure]
-    if: always() && !cancelled() && needs.prepare-deployment.result == 'success' && (needs.destroy-infrastructure.result == 'success' || needs.destroy-infrastructure.result == 'skipped')
+    needs: [prepare-deployment]
+    if: always() && needs.prepare-deployment.result == 'success'
     
     steps:
     - name: Checkout repository
@@ -245,8 +245,7 @@ jobs:
 
   deploy-main-infrastructure:
     runs-on: ubuntu-latest
-    needs: [prepare-deployment, deploy-resource-groups]
-    if: needs.prepare-deployment.result == 'success' && needs.deploy-resource-groups.result == 'success'
+    needs: [prepare-deployment]
     outputs:
       deployment-outputs: ${{ steps.deploy.outputs.deployment-outputs }}
     
@@ -291,8 +290,7 @@ jobs:
 
   deploy-ai-studio:
     runs-on: ubuntu-latest
-    needs: [prepare-deployment, deploy-resource-groups, deploy-main-infrastructure]
-    if: needs.prepare-deployment.result == 'success' && needs.deploy-resource-groups.result == 'success' && needs.deploy-main-infrastructure.result == 'success'
+    needs: [prepare-deployment, deploy-main-infrastructure]
     outputs:
       ai-studio-outputs: ${{ steps.deploy-ai.outputs.ai-studio-outputs }}
     
