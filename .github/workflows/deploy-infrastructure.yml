@@ -451,6 +451,8 @@ jobs:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
         
     - name: Get service keys and update secrets
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
         echo "🔑 Retrieving service keys..."
         
