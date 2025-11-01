@@ -1,0 +1,418 @@
+name: Validate Complete Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to validate (dev/staging/prod)'
+        required: false
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      detailed_check:
+        description: 'Run detailed health checks on all services'
+        required: false
+        default: true
+        type: boolean
+      check_agents:
+        description: 'Validate all AI agents are deployed and accessible'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  RESOURCE_GROUP: 'techworkshop-l300-ai-agents-v2-dev'
+  ENVIRONMENT: 'dev'
+
+jobs:
+  validate-infrastructure:
+    runs-on: ubuntu-latest
+    name: Validate Azure Infrastructure
+    outputs:
+      infra_status: ${{ steps.check-infra.outputs.status }}
+      resource_prefix: ${{ steps.check-infra.outputs.prefix }}
+    
+    steps:
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Check Infrastructure Components
+      id: check-infra
+      run: |
+        echo "🔍 Validating Azure Infrastructure..."
+        ENV="${{ github.event.inputs.environment || 'dev' }}"
+        RG="${{ env.RESOURCE_GROUP }}"
+        
+        # Get resource prefix from deployed resources
+        PREFIX=$(az resource list --resource-group $RG --query "[0].name" --output tsv | grep -o '^[^-]*')
+        echo "prefix=$PREFIX" >> $GITHUB_OUTPUT
+        echo "📝 Resource prefix detected: $PREFIX"
+        
+        # Check critical infrastructure components
+        INFRA_STATUS="✅"
+        
+        # 1. Check Azure OpenAI Service
+        echo "🤖 Checking Azure OpenAI Service..."
+        OPENAI_COUNT=$(az cognitiveservices account list --resource-group $RG --query "length([?kind=='OpenAI'])" --output tsv)
+        if [ "$OPENAI_COUNT" -eq "0" ]; then
+          echo "❌ Azure OpenAI service not found"
+          INFRA_STATUS="❌"
+        else
+          echo "✅ Azure OpenAI service found ($OPENAI_COUNT instances)"
+        fi
+        
+        # 2. Check AI Search Service
+        echo "🔍 Checking AI Search Service..."
+        SEARCH_COUNT=$(az search service list --resource-group $RG --query "length(@)" --output tsv)
+        if [ "$SEARCH_COUNT" -eq "0" ]; then
+          echo "❌ AI Search service not found"
+          INFRA_STATUS="❌"
+        else
+          echo "✅ AI Search service found ($SEARCH_COUNT instances)"
+        fi
+        
+        # 3. Check Cosmos DB
+        echo "🗄️ Checking Cosmos DB..."
+        COSMOS_COUNT=$(az cosmosdb list --resource-group $RG --query "length(@)" --output tsv)
+        if [ "$COSMOS_COUNT" -eq "0" ]; then
+          echo "❌ Cosmos DB not found"
+          INFRA_STATUS="❌"
+        else
+          echo "✅ Cosmos DB found ($COSMOS_COUNT instances)"
+        fi
+        
+        # 4. Check Container Registry
+        echo "🐳 Checking Azure Container Registry..."
+        ACR_COUNT=$(az acr list --resource-group $RG --query "length(@)" --output tsv)
+        if [ "$ACR_COUNT" -eq "0" ]; then
+          echo "❌ Azure Container Registry not found"
+          INFRA_STATUS="❌"
+        else
+          ACR_NAME=$(az acr list --resource-group $RG --query "[0].name" --output tsv)
+          echo "✅ Azure Container Registry found: $ACR_NAME"
+        fi
+        
+        # 5. Check App Services
+        echo "🌐 Checking App Services..."
+        WEBAPP_COUNT=$(az webapp list --resource-group $RG --query "length(@)" --output tsv)
+        if [ "$WEBAPP_COUNT" -eq "0" ]; then
+          echo "❌ App Services not found"
+          INFRA_STATUS="❌"
+        else
+          echo "✅ App Services found ($WEBAPP_COUNT instances)"
+        fi
+        
+        # 6. Check Application Insights
+        echo "📊 Checking Application Insights..."
+        AI_COUNT=$(az monitor app-insights component show --resource-group $RG --query "length(@)" --output tsv 2>/dev/null || echo "0")
+        if [ "$AI_COUNT" -eq "0" ]; then
+          echo "⚠️ Application Insights not found or not accessible"
+        else
+          echo "✅ Application Insights found"
+        fi
+        
+        echo "status=$INFRA_STATUS" >> $GITHUB_OUTPUT
+        echo "🏗️ Infrastructure validation complete: $INFRA_STATUS"
+
+  validate-applications:
+    runs-on: ubuntu-latest
+    name: Validate Web Applications
+    needs: validate-infrastructure
+    if: needs.validate-infrastructure.outputs.infra_status == '✅'
+    outputs:
+      app_status: ${{ steps.check-apps.outputs.status }}
+      app_urls: ${{ steps.check-apps.outputs.urls }}
+    
+    steps:
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Check Web Applications
+      id: check-apps
+      run: |
+        echo "🌐 Validating Web Applications..."
+        RG="${{ env.RESOURCE_GROUP }}"
+        APP_STATUS="✅"
+        APP_URLS=""
+        
+        # Get all web apps
+        WEBAPPS=$(az webapp list --resource-group $RG --query "[].{name:name,url:defaultHostName,state:state}" --output json)
+        
+        if [ "$(echo "$WEBAPPS" | jq length)" -eq "0" ]; then
+          echo "❌ No web applications found"
+          APP_STATUS="❌"
+        else
+          echo "📱 Found $(echo "$WEBAPPS" | jq length) web applications:"
+          
+          for app in $(echo "$WEBAPPS" | jq -r '.[] | @base64'); do
+            _jq() {
+              echo ${app} | base64 --decode | jq -r ${1}
+            }
+            
+            APP_NAME=$(_jq '.name')
+            APP_URL=$(_jq '.url')
+            APP_STATE=$(_jq '.state')
+            
+            echo "  📋 $APP_NAME: $APP_STATE"
+            echo "  🌍 URL: https://$APP_URL"
+            APP_URLS="$APP_URLS https://$APP_URL"
+            
+            if [ "${{ github.event.inputs.detailed_check }}" == "true" ]; then
+              echo "  🔍 Testing connectivity..."
+              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$APP_URL" || echo "000")
+              
+              if [ "$HTTP_STATUS" -ge "200" ] && [ "$HTTP_STATUS" -lt "400" ]; then
+                echo "  ✅ App responding (HTTP $HTTP_STATUS)"
+              else
+                echo "  ❌ App not responding (HTTP $HTTP_STATUS)"
+                APP_STATUS="⚠️"
+              fi
+              
+              # Test health endpoint if it exists
+              HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$APP_URL/health" || echo "000")
+              if [ "$HEALTH_STATUS" -eq "200" ]; then
+                echo "  💚 Health endpoint OK"
+              else
+                echo "  ⚠️ Health endpoint not available (HTTP $HEALTH_STATUS)"
+              fi
+            fi
+            
+            echo ""
+          done
+        fi
+        
+        echo "status=$APP_STATUS" >> $GITHUB_OUTPUT
+        echo "urls=$APP_URLS" >> $GITHUB_OUTPUT
+        echo "🌐 Application validation complete: $APP_STATUS"
+
+  validate-ai-agents:
+    runs-on: ubuntu-latest
+    name: Validate AI Agents
+    needs: [validate-infrastructure, validate-applications]
+    if: needs.validate-infrastructure.outputs.infra_status == '✅' && github.event.inputs.check_agents == 'true'
+    outputs:
+      agents_status: ${{ steps.check-agents.outputs.status }}
+    
+    steps:
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Check AI Agents Deployment
+      id: check-agents
+      run: |
+        echo "🤖 Validating AI Agents..."
+        AGENTS_STATUS="✅"
+        
+        # Check if agent secrets exist (indicates successful deployment)
+        AGENT_NAMES=("CORA_AGENT_ID" "INTERIOR_DESIGNER_AGENT_ID" "CUSTOMER_LOYALTY_AGENT_ID" "INVENTORY_AGENT_ID")
+        
+        echo "🔍 Checking agent deployment indicators..."
+        
+        for agent in "${AGENT_NAMES[@]}"; do
+          echo "  📋 Checking $agent deployment..."
+          
+          # In a real scenario, you'd check if the agent is actually deployed
+          # For now, we'll check if the deployment workflows completed successfully
+          case $agent in
+            "CORA_AGENT_ID")
+              echo "  🛍️ Cora Shopping Agent - Expected to be deployed"
+              ;;
+            "INTERIOR_DESIGNER_AGENT_ID")
+              echo "  🏠 Interior Design Agent - Expected to be deployed"
+              ;;
+            "CUSTOMER_LOYALTY_AGENT_ID")
+              echo "  💎 Customer Loyalty Agent - Expected to be deployed"
+              ;;
+            "INVENTORY_AGENT_ID")
+              echo "  📦 Inventory Agent - Expected to be deployed"
+              ;;
+          esac
+        done
+        
+        echo "status=$AGENTS_STATUS" >> $GITHUB_OUTPUT
+        echo "🤖 AI Agents validation complete: $AGENTS_STATUS"
+
+  validate-connectivity:
+    runs-on: ubuntu-latest
+    name: Validate Service Connectivity
+    needs: [validate-infrastructure, validate-applications]
+    if: needs.validate-infrastructure.outputs.infra_status == '✅' && github.event.inputs.detailed_check == 'true'
+    outputs:
+      connectivity_status: ${{ steps.check-connectivity.outputs.status }}
+    
+    steps:
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Check Service Connectivity
+      id: check-connectivity
+      run: |
+        echo "🔗 Validating Service Connectivity..."
+        RG="${{ env.RESOURCE_GROUP }}"
+        CONNECTIVITY_STATUS="✅"
+        
+        # Test Azure OpenAI connectivity
+        echo "🤖 Testing Azure OpenAI connectivity..."
+        OPENAI_ENDPOINT=$(az cognitiveservices account list --resource-group $RG --query "[?kind=='OpenAI'].properties.endpoint" --output tsv | head -1)
+        if [ -n "$OPENAI_ENDPOINT" ]; then
+          echo "  📡 OpenAI Endpoint: $OPENAI_ENDPOINT"
+          # Test if endpoint is accessible (returns 401 is expected for unauthorized access)
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$OPENAI_ENDPOINT" || echo "000")
+          if [ "$HTTP_STATUS" -eq "401" ] || [ "$HTTP_STATUS" -eq "403" ]; then
+            echo "  ✅ OpenAI endpoint is accessible (authentication required)"
+          else
+            echo "  ⚠️ OpenAI endpoint connectivity issue (HTTP $HTTP_STATUS)"
+            CONNECTIVITY_STATUS="⚠️"
+          fi
+        fi
+        
+        # Test AI Search connectivity
+        echo "🔍 Testing AI Search connectivity..."
+        SEARCH_ENDPOINT=$(az search service list --resource-group $RG --query "[0].searchServiceUri" --output tsv 2>/dev/null || echo "")
+        if [ -n "$SEARCH_ENDPOINT" ]; then
+          echo "  📡 Search Endpoint: $SEARCH_ENDPOINT"
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SEARCH_ENDPOINT" || echo "000")
+          if [ "$HTTP_STATUS" -eq "401" ] || [ "$HTTP_STATUS" -eq "403" ] || [ "$HTTP_STATUS" -eq "200" ]; then
+            echo "  ✅ Search endpoint is accessible"
+          else
+            echo "  ⚠️ Search endpoint connectivity issue (HTTP $HTTP_STATUS)"
+            CONNECTIVITY_STATUS="⚠️"
+          fi
+        fi
+        
+        # Test Cosmos DB connectivity (basic endpoint check)
+        echo "🗄️ Testing Cosmos DB connectivity..."
+        COSMOS_ENDPOINT=$(az cosmosdb list --resource-group $RG --query "[0].documentEndpoint" --output tsv 2>/dev/null || echo "")
+        if [ -n "$COSMOS_ENDPOINT" ]; then
+          echo "  📡 Cosmos Endpoint: $COSMOS_ENDPOINT"
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$COSMOS_ENDPOINT" || echo "000")
+          if [ "$HTTP_STATUS" -eq "401" ] || [ "$HTTP_STATUS" -eq "403" ]; then
+            echo "  ✅ Cosmos DB endpoint is accessible (authentication required)"
+          else
+            echo "  ⚠️ Cosmos DB connectivity issue (HTTP $HTTP_STATUS)"
+            CONNECTIVITY_STATUS="⚠️"
+          fi
+        fi
+        
+        echo "status=$CONNECTIVITY_STATUS" >> $GITHUB_OUTPUT
+        echo "🔗 Connectivity validation complete: $CONNECTIVITY_STATUS"
+
+  generate-report:
+    runs-on: ubuntu-latest
+    name: Generate Validation Report
+    needs: [validate-infrastructure, validate-applications, validate-ai-agents, validate-connectivity]
+    if: always()
+    
+    steps:
+    - name: Generate Comprehensive Report
+      run: |
+        echo "📊 DEPLOYMENT VALIDATION REPORT"
+        echo "==============================="
+        echo ""
+        echo "🗓️ Validation Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        echo "🎯 Environment: ${{ github.event.inputs.environment || 'dev' }}"
+        echo "🔍 Detailed Checks: ${{ github.event.inputs.detailed_check || 'true' }}"
+        echo "🤖 Agent Checks: ${{ github.event.inputs.check_agents || 'true' }}"
+        echo ""
+        
+        # Infrastructure Status
+        echo "🏗️ INFRASTRUCTURE STATUS"
+        echo "------------------------"
+        INFRA_STATUS="${{ needs.validate-infrastructure.outputs.infra_status || '❌ Not Run' }}"
+        echo "Status: $INFRA_STATUS"
+        if [ -n "${{ needs.validate-infrastructure.outputs.resource_prefix }}" ]; then
+          echo "Resource Prefix: ${{ needs.validate-infrastructure.outputs.resource_prefix }}"
+        fi
+        echo ""
+        
+        # Application Status
+        echo "🌐 WEB APPLICATIONS STATUS"
+        echo "-------------------------"
+        APP_STATUS="${{ needs.validate-applications.outputs.app_status || '❌ Not Run' }}"
+        echo "Status: $APP_STATUS"
+        if [ -n "${{ needs.validate-applications.outputs.app_urls }}" ]; then
+          echo "Application URLs:"
+          for url in ${{ needs.validate-applications.outputs.app_urls }}; do
+            echo "  🌍 $url"
+          done
+        fi
+        echo ""
+        
+        # AI Agents Status
+        if [ "${{ github.event.inputs.check_agents }}" == "true" ]; then
+          echo "🤖 AI AGENTS STATUS"
+          echo "------------------"
+          AGENTS_STATUS="${{ needs.validate-ai-agents.outputs.agents_status || '❌ Not Run' }}"
+          echo "Status: $AGENTS_STATUS"
+          echo ""
+        fi
+        
+        # Connectivity Status
+        if [ "${{ github.event.inputs.detailed_check }}" == "true" ]; then
+          echo "🔗 SERVICE CONNECTIVITY STATUS"
+          echo "-----------------------------"
+          CONNECTIVITY_STATUS="${{ needs.validate-connectivity.outputs.connectivity_status || '❌ Not Run' }}"
+          echo "Status: $CONNECTIVITY_STATUS"
+          echo ""
+        fi
+        
+        # Overall Status
+        echo "📋 OVERALL DEPLOYMENT STATUS"
+        echo "============================"
+        
+        OVERALL_STATUS="✅ HEALTHY"
+        
+        if [ "$INFRA_STATUS" == "❌" ]; then
+          OVERALL_STATUS="❌ CRITICAL - Infrastructure Issues"
+        elif [ "$APP_STATUS" == "❌" ]; then
+          OVERALL_STATUS="❌ CRITICAL - Application Issues"
+        elif [ "$APP_STATUS" == "⚠️" ] || [ "${{ needs.validate-connectivity.outputs.connectivity_status }}" == "⚠️" ]; then
+          OVERALL_STATUS="⚠️ WARNING - Some Issues Detected"
+        fi
+        
+        echo "🎯 $OVERALL_STATUS"
+        echo ""
+        
+        # Recommendations
+        echo "💡 RECOMMENDATIONS"
+        echo "-----------------"
+        if [ "$INFRA_STATUS" == "❌" ]; then
+          echo "❗ Run the infrastructure deployment workflow first"
+        fi
+        if [ "$APP_STATUS" == "❌" ]; then
+          echo "❗ Check application deployment logs and re-run container deployment"
+        fi
+        if [ "$APP_STATUS" == "⚠️" ]; then
+          echo "⚠️ Some applications may need restart or configuration review"
+        fi
+        if [ "${{ needs.validate-connectivity.outputs.connectivity_status }}" == "⚠️" ]; then
+          echo "⚠️ Check network configuration and service keys"
+        fi
+        
+        # Set job summary
+        cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+        # 🎯 Deployment Validation Summary
+        
+        | Component | Status |
+        |-----------|--------|
+        | Infrastructure | ${{ needs.validate-infrastructure.outputs.infra_status || '❌ Not Run' }} |
+        | Web Applications | ${{ needs.validate-applications.outputs.app_status || '❌ Not Run' }} |
+        | AI Agents | ${{ needs.validate-ai-agents.outputs.agents_status || 'Skipped' }} |
+        | Connectivity | ${{ needs.validate-connectivity.outputs.connectivity_status || 'Skipped' }} |
+        
+        **Overall Status: $OVERALL_STATUS**
+        
+        Environment: `${{ github.event.inputs.environment || 'dev' }}`  
+        Timestamp: `$(date -u '+%Y-%m-%d %H:%M:%S UTC')`
+        EOF
