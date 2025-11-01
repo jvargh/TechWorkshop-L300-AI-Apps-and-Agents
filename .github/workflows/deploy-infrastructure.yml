@@ -281,7 +281,10 @@ jobs:
           --query properties.outputs \
           --output json)
           
-        echo "deployment-outputs=$DEPLOYMENT_OUTPUT" >> $GITHUB_OUTPUT
+        # Properly encode JSON for GitHub Actions output
+        echo "deployment-outputs<<EOF" >> $GITHUB_OUTPUT
+        echo "$DEPLOYMENT_OUTPUT" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
         echo "✅ Main infrastructure deployed successfully"
         
         # Display key outputs
