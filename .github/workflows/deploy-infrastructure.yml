@@ -458,14 +458,14 @@ jobs:
         # Replace these with dynamic values when re-enabling full workflow
         
         # Get resource names from previous deployment
-        RESOURCE_GROUP="techworkshop-l300-ai-agents-centralus"
-        AI_RESOURCE_GROUP="techworkshop-l300-ai-agents-centralus"
+        RESOURCE_GROUP="techworkshop-l300-ai-agents-v2-dev"
+        AI_RESOURCE_GROUP="azureai-v2-dev-rg"
         
-        STORAGE_ACCOUNT="stowrgnenm7wj2y"
-        COSMOS_ACCOUNT="owrgnenm7wj2y-cosmosdb"
-        SEARCH_SERVICE="owrgnenm7wj2y-search"
-        AI_SERVICES="owrgnenm7wj2y-ai-services"
-        APP_INSIGHTS="owrgnenm7wj2y-app-insights"
+        STORAGE_ACCOUNT="stpdmoobijwgr5cdev"
+        COSMOS_ACCOUNT="pdmoobijwgr5c-dev-cosmosdb"
+        SEARCH_SERVICE="pdmoobijwgr5c-dev-search"
+        AI_SERVICES="aif-pdmoobijwgr5c-dev"
+        APP_INSIGHTS="pdmoobijwgr5c-dev-ai"
         
         # Debug: Show parsed values
         echo "Debug - Parsed values:"
@@ -474,7 +474,7 @@ jobs:
         echo "COSMOS_ACCOUNT: '$COSMOS_ACCOUNT'"
         echo "SEARCH_SERVICE: '$SEARCH_SERVICE'"
         
-        AI_STUDIO_HUB="admin-mh2k31bc-eastus2"
+        AI_STUDIO_HUB="admin-yujtlhioetcli-eastus2"
         
         # Validate required values exist
         if [ -z "$STORAGE_ACCOUNT" ] || [ "$STORAGE_ACCOUNT" = "null" ]; then
