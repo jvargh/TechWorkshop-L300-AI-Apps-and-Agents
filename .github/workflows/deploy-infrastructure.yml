@@ -438,7 +438,8 @@ jobs:
 
   get-service-keys:
     runs-on: ubuntu-latest  
-    needs: [prepare-deployment, deploy-main-infrastructure, deploy-ai-studio, update-github-secrets]
+    # Temporarily disabled dependencies for testing - uncomment when ready
+    # needs: [prepare-deployment, deploy-main-infrastructure, deploy-ai-studio, update-github-secrets]
     
     steps:
     - name: Checkout repository
@@ -455,35 +456,64 @@ jobs:
       run: |
         echo "🔑 Retrieving service keys..."
         
-        # Parse deployment outputs
-        MAIN_OUTPUTS='${{ needs.deploy-main-infrastructure.outputs.deployment-outputs }}'
-        AI_OUTPUTS='${{ needs.deploy-ai-studio.outputs.ai-studio-outputs }}'
+        # TESTING MODE: Using hardcoded values from previous successful deployment
+        # Replace these with dynamic values when re-enabling full workflow
         
-        # Get resource names
-        RESOURCE_GROUP=$(echo "$MAIN_OUTPUTS" | jq -r '.resourceGroupName.value')
-        AI_RESOURCE_GROUP=${{ needs.prepare-deployment.outputs.ai-studio-rg }}
+        # Get resource names from previous deployment
+        RESOURCE_GROUP="techworkshop-l300-ai-agents-centralus"
+        AI_RESOURCE_GROUP="techworkshop-l300-ai-agents-centralus"
         
-        STORAGE_ACCOUNT=$(echo "$MAIN_OUTPUTS" | jq -r '.storageAccountName.value')
-        COSMOS_ACCOUNT=$(echo "$MAIN_OUTPUTS" | jq -r '.resourceNaming.value.cosmosDb')
-        SEARCH_SERVICE=$(echo "$MAIN_OUTPUTS" | jq -r '.resourceNaming.value.aiSearch')
-        AI_SERVICES=$(echo "$MAIN_OUTPUTS" | jq -r '.resourceNaming.value.aiServices')
-        APP_INSIGHTS=$(echo "$MAIN_OUTPUTS" | jq -r '.resourceNaming.value.appInsights')
+        STORAGE_ACCOUNT="stowrgnenm7wj2y"
+        COSMOS_ACCOUNT="owrgnenm7wj2y-cosmosdb"
+        SEARCH_SERVICE="owrgnenm7wj2y-search"
+        AI_SERVICES="owrgnenm7wj2y-ai-services"
+        APP_INSIGHTS="owrgnenm7wj2y-app-insights"
         
-        AI_STUDIO_HUB=$(echo "$AI_OUTPUTS" | jq -r '.aiStudioHubName.value')
+        # Debug: Show parsed values
+        echo "Debug - Parsed values:"
+        echo "RESOURCE_GROUP: '$RESOURCE_GROUP'"
+        echo "STORAGE_ACCOUNT: '$STORAGE_ACCOUNT'"
+        echo "COSMOS_ACCOUNT: '$COSMOS_ACCOUNT'"
+        echo "SEARCH_SERVICE: '$SEARCH_SERVICE'"
+        
+        AI_STUDIO_HUB="admin-mh2k31bc-eastus2"
+        
+        # Validate required values exist
+        if [ -z "$STORAGE_ACCOUNT" ] || [ "$STORAGE_ACCOUNT" = "null" ]; then
+          echo "❌ ERROR: Storage account name not found in deployment outputs"
+          exit 1
+        fi
+        
+        if [ -z "$RESOURCE_GROUP" ] || [ "$RESOURCE_GROUP" = "null" ]; then
+          echo "❌ ERROR: Resource group name not found in deployment outputs"
+          exit 1
+        fi
         
         # Get service keys
-        echo "Getting storage connection string..."
-        STORAGE_CONN=$(az storage account show-connection-string --name $STORAGE_ACCOUNT --resource-group $RESOURCE_GROUP --query connectionString -o tsv)
+        echo "Getting storage connection string for account: $STORAGE_ACCOUNT in RG: $RESOURCE_GROUP"
+        STORAGE_CONN=$(az storage account show-connection-string --name "$STORAGE_ACCOUNT" --resource-group "$RESOURCE_GROUP" --query connectionString -o tsv)
         gh secret set BLOB_CONNECTION_STRING --body "$STORAGE_CONN"
         
-        echo "Getting Cosmos DB key..."
-        COSMOS_KEY=$(az cosmosdb keys list --name $COSMOS_ACCOUNT --resource-group $RESOURCE_GROUP --query primaryMasterKey -o tsv)
+        # Validate Cosmos DB account name
+        if [ -z "$COSMOS_ACCOUNT" ] || [ "$COSMOS_ACCOUNT" = "null" ]; then
+          echo "❌ ERROR: Cosmos DB account name not found in deployment outputs"
+          exit 1
+        fi
+        
+        echo "Getting Cosmos DB key for account: $COSMOS_ACCOUNT"
+        COSMOS_KEY=$(az cosmosdb keys list --name "$COSMOS_ACCOUNT" --resource-group "$RESOURCE_GROUP" --query primaryMasterKey -o tsv)
         gh secret set COSMOS_KEY --body "$COSMOS_KEY"
-        COSMOS_ENDPOINT=$(az cosmosdb show --name $COSMOS_ACCOUNT --resource-group $RESOURCE_GROUP --query documentEndpoint -o tsv)
+        COSMOS_ENDPOINT=$(az cosmosdb show --name "$COSMOS_ACCOUNT" --resource-group "$RESOURCE_GROUP" --query documentEndpoint -o tsv)
         gh secret set COSMOS_ENDPOINT --body "$COSMOS_ENDPOINT"
         
-        echo "Getting AI Search key..."
-        SEARCH_KEY=$(az search admin-key show --service-name $SEARCH_SERVICE --resource-group $RESOURCE_GROUP --query primaryKey -o tsv)
+        # Validate AI Search service name
+        if [ -z "$SEARCH_SERVICE" ] || [ "$SEARCH_SERVICE" = "null" ]; then
+          echo "❌ ERROR: AI Search service name not found in deployment outputs"
+          exit 1
+        fi
+        
+        echo "Getting AI Search key for service: $SEARCH_SERVICE"
+        SEARCH_KEY=$(az search admin-key show --service-name "$SEARCH_SERVICE" --resource-group "$RESOURCE_GROUP" --query primaryKey -o tsv)
         gh secret set SEARCH_KEY --body "$SEARCH_KEY"
         SEARCH_ENDPOINT="https://${SEARCH_SERVICE}.search.windows.net"
         gh secret set SEARCH_ENDPOINT --body "$SEARCH_ENDPOINT"
@@ -511,11 +541,11 @@ jobs:
         echo "✅ All service keys retrieved and stored as secrets"
 
   #============================================================================
-  # DATA DEPLOYMENT PHASE
+  # DATA DEPLOYMENT PHASE - DISABLED FOR TESTING
   #============================================================================
   deploy-sample-data:
     runs-on: ubuntu-latest
-    needs: [prepare-deployment, deploy-main-infrastructure, deploy-ai-studio, get-service-keys]
+    needs: [get-service-keys]  # Simplified dependency for testing
     if: github.event.inputs.deploy_sample_data == 'true'
     
     steps:
