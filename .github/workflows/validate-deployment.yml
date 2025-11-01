@@ -56,14 +56,16 @@ jobs:
         # Check critical infrastructure components
         INFRA_STATUS="✅"
         
-        # 1. Check Azure OpenAI Service
+        # 1. Check Azure OpenAI Service (includes both OpenAI and AIServices kinds)
         echo "🤖 Checking Azure OpenAI Service..."
-        OPENAI_COUNT=$(az cognitiveservices account list --resource-group $RG --query "length([?kind=='OpenAI'])" --output tsv)
+        OPENAI_COUNT=$(az cognitiveservices account list --resource-group $RG --query "length([?kind=='OpenAI' || kind=='AIServices'])" --output tsv)
         if [ "$OPENAI_COUNT" -eq "0" ]; then
-          echo "❌ Azure OpenAI service not found"
+          echo "❌ Azure OpenAI/AI Services not found"
           INFRA_STATUS="❌"
         else
-          echo "✅ Azure OpenAI service found ($OPENAI_COUNT instances)"
+          OPENAI_NAMES=$(az cognitiveservices account list --resource-group $RG --query "[?kind=='OpenAI' || kind=='AIServices'].{name:name, kind:kind}" --output tsv)
+          echo "✅ Azure OpenAI/AI Services found ($OPENAI_COUNT instances)"
+          echo "  📋 Services: $OPENAI_NAMES"
         fi
         
         # 2. Check AI Search Service
