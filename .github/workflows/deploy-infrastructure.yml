@@ -29,8 +29,8 @@ env:
   # These values are loaded from the config file but can be overridden here if needed
   PRIMARY_LOCATION: 'centralus'
   AI_STUDIO_LOCATION: 'eastus2'
-  PRIMARY_RG_NAME: 'techworkshop-l300-ai-agents-${{ github.event.inputs.environment }}'
-  AI_STUDIO_RG_NAME: 'azureai-${{ github.event.inputs.environment }}-rg'
+  PRIMARY_RG_NAME: 'techworkshop-l300-ai-agents-v2-${{ github.event.inputs.environment }}'
+  AI_STUDIO_RG_NAME: 'azureai-v2-${{ github.event.inputs.environment }}-rg'
   CONFIG_FILE: 'src/infra/config/infrastructure-variables.yml'
   PARAMETERS_FILE: 'src/infra/parameters/${{ github.event.inputs.environment }}.parameters.json'
 

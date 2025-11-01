@@ -27,10 +27,10 @@ locations:
 # ====================================
 resource_groups:
   # Pattern: {base-name}-{environment}
-  primary: "techworkshop-l300-ai-agents"
+  primary: "techworkshop-l300-ai-agents-v2"
   
   # Pattern: azureai-{environment}-rg
-  ai_studio: "azureai"
+  ai_studio: "azureai-v2"
 
 # ====================================
 # NAMING CONVENTION SETTINGS
