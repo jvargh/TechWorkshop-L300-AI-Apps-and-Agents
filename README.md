@@ -4,6 +4,15 @@ This lab teaches you how to design and build AI applications and agents using Az
 
 **Status**: ✅ Complete implementation with full CI/CD automation via GitHub Actions
 
+## Technology Stack
+
+- **Python 3.10+**: Primary application language
+- **.NET 10 LTS**: Infrastructure tooling (Bicep, Azure Developer CLI)
+- **Azure Bicep**: Infrastructure as Code
+- **Azure AI Foundry**: AI agent development platform
+
+> 📘 **Note**: This repository uses [.NET 10 LTS](DOTNET-UPDATE.md) for development tooling, ensuring long-term support until November 2028. See [DOTNET-UPDATE.md](DOTNET-UPDATE.md) for details.
+
 ## Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
